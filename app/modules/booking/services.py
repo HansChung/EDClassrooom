@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import and_, func
 
@@ -14,6 +14,61 @@ class BookingValidationResult:
     ok: bool
     risk_level: str = "low"
     reason: str = ""
+
+
+@dataclass
+class TimeSlot:
+    start_at: datetime
+    end_at: datetime
+
+
+def _get_room_bookings_for_window(
+    *,
+    classroom_id: int,
+    start_at: datetime,
+    end_at: datetime,
+) -> list[BookingRequest]:
+    return (
+        db.session.query(BookingRequest)
+        .filter(
+            BookingRequest.classroom_id == classroom_id,
+            BookingRequest.status.in_(["approved", "pending", "pending_approval"]),
+            and_(BookingRequest.start_at < end_at, BookingRequest.end_at > start_at),
+        )
+        .order_by(BookingRequest.start_at.asc())
+        .all()
+    )
+
+
+def list_room_availability(*, classroom_id: int, target_date: date) -> tuple[list[TimeSlot], list[TimeSlot]]:
+    day_start = datetime.combine(target_date, time(hour=8))
+    day_end = datetime.combine(target_date, time(hour=22))
+    bookings = _get_room_bookings_for_window(
+        classroom_id=classroom_id,
+        start_at=day_start,
+        end_at=day_end,
+    )
+
+    occupied_slots = [
+        TimeSlot(
+            start_at=max(booking.start_at, day_start),
+            end_at=min(booking.end_at, day_end),
+        )
+        for booking in bookings
+    ]
+
+    available_slots: list[TimeSlot] = []
+    cursor = day_start
+    for slot in occupied_slots:
+        if cursor < slot.start_at:
+            available_slots.append(TimeSlot(start_at=cursor, end_at=slot.start_at))
+        if slot.end_at > cursor:
+            cursor = slot.end_at
+
+    if cursor < day_end:
+        available_slots.append(TimeSlot(start_at=cursor, end_at=day_end))
+
+    return occupied_slots, available_slots
 
 
 def get_int_rule(key: str, default: int) -> int:
@@ -69,15 +124,12 @@ def validate_booking(
     if daily_hours + duration_hours > max_hours_per_day:
         return BookingValidationResult(False, reason=f"每日借用總時數不可超過 {max_hours_per_day} 小時。")
 
-    conflict_exists = (
-        db.session.query(BookingRequest)
-        .filter(
-            BookingRequest.classroom_id == classroom.id,
-            BookingRequest.status.in_(["approved", "pending"]),
-            and_(BookingRequest.start_at < end_at, BookingRequest.end_at > start_at),
+    conflict_exists = bool(
+        _get_room_bookings_for_window(
+            classroom_id=classroom.id,
+            start_at=start_at,
+            end_at=end_at,
         )
-        .first()
-        is not None
     )
     if conflict_exists:
         return BookingValidationResult(False, reason="該時段已有借用，請改選其他時間。")

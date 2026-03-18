@@ -1,31 +1,145 @@
 {% extends "base.html" %}
 {% block title %}行事曆{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h2 class="h4 mb-0">借用行事曆</h2>
-  <div class="d-flex gap-2">
-    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('calendar.export_ics') }}">匯出 ICS</a>
+{% set export_room_id = selected_room_id if selected_room_id else None %}
+<div class="page-intro">
+  <div>
+    <div class="eyebrow">Calendar View</div>
+    <h2 class="section-title mb-1">借用行事曆</h2>
+    <div class="section-subtitle">改成更像 iPhone app 的日程卡片，先看每天有哪些借用，再決定下一步。</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('calendar.export_ics', room_id=export_room_id) }}">匯出 ICS</a>
     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('calendar.export_csv') }}">匯出 CSV</a>
     <a class="btn btn-outline-dark btn-sm" href="{{ url_for('calendar.export_xlsx') }}">匯出 XLSX</a>
     <a class="btn btn-outline-success btn-sm" href="{{ url_for('calendar.export_ods') }}">匯出 ODS</a>
   </div>
 </div>
 
-<form method="get" class="row g-2 mb-3">
-  <div class="col-md-3"><input class="form-control" type="date" name="start" placeholder="開始日期"></div>
-  <div class="col-md-3"><input class="form-control" type="date" name="end" placeholder="結束日期"></div>
+<div class="row g-3 mb-4">
   <div class="col-md-4">
-    <select name="room_id" class="form-select">
-      <option value="">全部教室</option>
-      {% for room in rooms %}
-        <option value="{{ room.id }}">{{ room.code }} {{ room.name }}</option>
-      {% endfor %}
-    </select>
+    <div class="quick-card">
+      <div class="quick-card-title">查詢結果</div>
+      <div class="quick-card-value">{{ bookings|length }} 筆借用</div>
+    </div>
   </div>
-  <div class="col-md-2"><button class="btn btn-primary w-100">查詢</button></div>
-</form>
+  <div class="col-md-4">
+    <div class="quick-card">
+      <div class="quick-card-title">檢視方式</div>
+      <div class="quick-card-value">日程卡片 + 明細表</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="quick-card">
+      <div class="quick-card-title">匯出格式</div>
+      <div class="quick-card-value">ICS / CSV / XLSX / ODS</div>
+    </div>
+  </div>
+</div>
 
-<div class="table-responsive">
+<div class="phone-sheet p-4 mb-4">
+  <form method="get" class="row g-3">
+    <div class="col-md-3">
+      <div class="ios-field">
+        <label class="form-label">開始日期</label>
+        <input class="form-control" type="date" name="start" value="{{ selected_start }}">
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="ios-field">
+        <label class="form-label">結束日期</label>
+        <input class="form-control" type="date" name="end" value="{{ selected_end }}">
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ios-field">
+        <label class="form-label">教室</label>
+        <select name="room_id" class="form-select">
+          <option value="">全部教室</option>
+          {% for room in rooms %}
+            <option value="{{ room.id }}" {% if selected_room_id == room.id %}selected{% endif %}>{{ room.code }} {{ room.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+      <button class="btn btn-primary w-100">查詢</button>
+    </div>
+  </form>
+  <div class="pill-list mt-3">
+    <span class="pill-item">依日期篩選</span>
+    <span class="pill-item">依教室篩選</span>
+    <span class="pill-item">支援核准中與已核准案件</span>
+  </div>
+</div>
+
+<div class="calendar-board mb-4">
+  <section class="day-card">
+    <div class="day-card-header">
+      <div>
+        <div class="day-card-title">本週視圖</div>
+        <div class="day-card-subtitle">{{ week_range_label }}</div>
+      </div>
+      <span class="badge text-bg-light">Weekly Timeline</span>
+    </div>
+    <div class="week-strip">
+      {% for day in weekly_schedule %}
+        <div class="week-day-card">
+          <div class="week-day-head">
+            <div class="week-day-name">{{ day.weekday }}</div>
+            <div class="week-day-date">{{ day.label }}</div>
+          </div>
+          <div class="week-slot-list">
+            {% for item in day.items %}
+              <div class="week-slot">
+                <div class="week-slot-time">{{ item.start_at.strftime("%H:%M") }} - {{ item.end_at.strftime("%H:%M") }}</div>
+                <div class="week-slot-title">{{ item.title }}</div>
+                <div class="week-slot-room">{{ item.classroom.code }} / {{ item.requester.display_name }}</div>
+              </div>
+            {% else %}
+              <div class="week-slot">
+                <div class="week-slot-room">沒有借用</div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% for day_key, day_items in grouped_bookings %}
+    <section class="day-card">
+      <div class="day-card-header">
+        <div>
+          <div class="day-card-title">{{ day_key }}</div>
+          <div class="day-card-subtitle">{{ day_items|length }} 筆借用</div>
+        </div>
+        <span class="badge text-bg-light">Daily Schedule</span>
+      </div>
+      <div class="schedule-list">
+        {% for item in day_items %}
+          <article class="schedule-item">
+            <div class="schedule-time">{{ item.start_at.strftime("%H:%M") }} - {{ item.end_at.strftime("%H:%M") }}</div>
+            <div>
+              <div><strong>{{ item.classroom.code }} {{ item.title }}</strong></div>
+              <div class="schedule-meta">{{ item.requester.display_name }} / {{ item.classroom.name }} / {{ item.source }}</div>
+            </div>
+            <div class="d-flex justify-content-end">
+              <span class="status-badge status-{{ item.status }}">{{ item.status }}</span>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% else %}
+    <section class="day-card">
+      <div class="day-card-title mb-2">沒有符合條件的借用資料</div>
+      <div class="day-card-subtitle">可以調整日期區間或教室條件後再查詢。</div>
+    </section>
+  {% endfor %}
+</div>
+
+<div class="table-shell table-responsive">
   <table class="table table-striped align-middle">
     <thead>
       <tr><th>教室</th><th>活動</th><th>借用人</th><th>開始</th><th>結束</th><th>狀態</th><th>來源</th></tr>
@@ -38,7 +152,7 @@
           <td>{{ item.requester.display_name }}</td>
           <td>{{ item.start_at }}</td>
           <td>{{ item.end_at }}</td>
-          <td>{{ item.status }}</td>
+          <td><span class="status-badge status-{{ item.status }}">{{ item.status }}</span></td>
           <td>{{ item.source }}</td>
         </tr>
       {% else %}

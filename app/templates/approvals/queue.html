@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}審核佇列{% endblock %}
 {% block content %}
-<h2 class="h4 mb-3">高風險案件審核</h2>
-<div class="table-responsive">
+<div class="mb-3">
+  <h2 class="section-title mb-1">高風險案件審核</h2>
+  <div class="section-subtitle">集中處理需要人工判斷的借用申請。</div>
+</div>
+<div class="table-shell table-responsive">
   <table class="table table-hover align-middle">
     <thead>
       <tr>
@@ -20,7 +23,7 @@
           <td>#{{ item.id }}</td>
           <td>{{ item.requester.display_name }}</td>
           <td>{{ item.classroom.code }} {{ item.classroom.name }}</td>
-          <td>{{ item.start_at }}<br>{{ item.end_at }}</td>
+          <td><div>{{ item.start_at }}</div><div class="muted small">{{ item.end_at }}</div></td>
           <td>{{ item.purpose }}</td>
           <td>
             <form method="post" action="{{ url_for('approval.action', booking_id=item.id) }}" class="d-flex gap-2">

@@ -2,17 +2,36 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.extensions import db
 from app.models import BookingRequest, Classroom
 from app.modules.booking import bp
-from app.modules.booking.services import cancel_booking, create_booking, list_visible_bookings_for_role
+from app.modules.booking.services import (
+    cancel_booking,
+    create_booking,
+    list_room_availability,
+    list_visible_bookings_for_role,
+)
 
 
 def _parse_local_datetime(value: str) -> datetime:
     return datetime.strptime(value, "%Y-%m-%dT%H:%M")
+
+
+def _format_slot(slot_start: datetime, slot_end: datetime) -> str:
+    return f"{slot_start:%H:%M} - {slot_end:%H:%M}"
+
+
+def _format_slot_duration(slot_start: datetime, slot_end: datetime) -> str:
+    duration_minutes = int((slot_end - slot_start).total_seconds() // 60)
+    hours, minutes = divmod(duration_minutes, 60)
+    if hours and minutes:
+        return f"{hours}h {minutes}m"
+    if hours:
+        return f"{hours}h"
+    return f"{minutes}m"
 
 
 @bp.route("/")
@@ -60,6 +79,62 @@ def new_booking():
         return redirect(url_for("booking.list_bookings"))
 
     return render_template("bookings/new.html", rooms=rooms)
+
+
+@bp.route("/availability")
+@login_required
+def availability():
+    classroom_id = request.args.get("classroom_id", type=int)
+    target_date_raw = request.args.get("date", "").strip()
+
+    if not classroom_id or not target_date_raw:
+        return jsonify({"error": "請提供教室與日期。"}), 400
+
+    classroom = db.session.get(Classroom, classroom_id)
+    if classroom is None or not classroom.is_active or not classroom.is_online_bookable:
+        return jsonify({"error": "找不到可借用教室。"}), 404
+
+    try:
+        target_date = datetime.strptime(target_date_raw, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "日期格式不正確。"}), 400
+
+    occupied_slots, available_slots = list_room_availability(
+        classroom_id=classroom.id,
+        target_date=target_date,
+    )
+    return jsonify(
+        {
+            "classroom": {
+                "id": classroom.id,
+                "code": classroom.code,
+                "name": classroom.name,
+            },
+            "date": target_date.isoformat(),
+            "window": {
+                "start": "08:00",
+                "end": "22:00",
+            },
+            "occupied_slots": [
+                {
+                    "start": slot.start_at.isoformat(),
+                    "end": slot.end_at.isoformat(),
+                    "label": _format_slot(slot.start_at, slot.end_at),
+                    "duration": _format_slot_duration(slot.start_at, slot.end_at),
+                }
+                for slot in occupied_slots
+            ],
+            "available_slots": [
+                {
+                    "start": slot.start_at.isoformat(),
+                    "end": slot.end_at.isoformat(),
+                    "label": _format_slot(slot.start_at, slot.end_at),
+                    "duration": _format_slot_duration(slot.start_at, slot.end_at),
+                }
+                for slot in available_slots
+            ],
+        }
+    )
 
 
 @bp.route("/<int:booking_id>/cancel", methods=["POST"])

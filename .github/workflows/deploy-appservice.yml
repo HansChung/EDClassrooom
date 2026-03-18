@@ -23,7 +23,16 @@ jobs:
           pip install -r requirements.txt
 
       - name: Zip artifact
-        run: zip -r release.zip . -x "*.git*" ".venv/*"
+        run: |
+          rm -f release.zip
+          zip -r release.zip . \
+            -x "*.git*" \
+            -x ".venv/*" \
+            -x "__pycache__/*" \
+            -x "*.pyc" \
+            -x ".env" \
+            -x "*.db" \
+            -x "*.sqlite3"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3

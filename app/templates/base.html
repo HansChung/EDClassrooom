@@ -8,39 +8,84 @@
   <link href="{{ url_for('static', filename='app.css') }}" rel="stylesheet">
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container-fluid">
-      <a class="navbar-brand" href="{{ url_for('main.index') }}">教室借用系統</a>
-      <div class="navbar-nav">
-        {% if current_user.is_authenticated %}
-          <a class="nav-link" href="{{ url_for('booking.list_bookings') }}">借用紀錄</a>
-          <a class="nav-link" href="{{ url_for('calendar.month_view') }}">行事曆</a>
-          {% if current_user.has_any_role({'super_admin', 'staff_manager', 'workstudy_manager'}) %}
-            <a class="nav-link" href="{{ url_for('admin.dashboard') }}">管理後台</a>
-          {% endif %}
-          {% if current_user.has_any_role({'super_admin', 'staff_manager'}) %}
-            <a class="nav-link" href="{{ url_for('approval.queue') }}">核准介面</a>
-          {% endif %}
-          <a class="nav-link" href="{{ url_for('auth.logout') }}">登出</a>
-        {% else %}
-          <a class="nav-link" href="{{ url_for('auth.login') }}">Office 365 登入</a>
-        {% endif %}
-      </div>
-    </div>
-  </nav>
-  <main class="container py-4">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, msg in messages %}
-          <div class="alert alert-{{ category }} alert-dismissible fade show">
-            {{ msg }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  <div class="container page-shell">
+    <div class="navbar-shell">
+      <nav class="navbar navbar-expand-lg">
+        <div class="container-fluid px-0">
+          <a class="navbar-brand" href="{{ url_for('main.index') }}">ED Classroom</a>
+          <div class="navbar-nav ms-auto">
+            {% if current_user.is_authenticated %}
+              <a class="nav-link" href="{{ url_for('booking.list_bookings') }}">借用紀錄</a>
+              <a class="nav-link" href="{{ url_for('calendar.month_view') }}">行事曆</a>
+              {% if current_user.has_any_role(['super_admin', 'staff_manager', 'workstudy_manager']) %}
+                <a class="nav-link" href="{{ url_for('admin.dashboard') }}">管理後台</a>
+              {% endif %}
+              {% if current_user.has_any_role(['super_admin', 'staff_manager']) %}
+                <a class="nav-link" href="{{ url_for('approval.queue') }}">核准介面</a>
+              {% endif %}
+              <a class="nav-link" href="{{ url_for('auth.logout') }}">登出</a>
+            {% else %}
+              <a class="nav-link" href="{{ url_for('auth.login') }}">Office 365 登入</a>
+            {% endif %}
           </div>
-        {% endfor %}
+        </div>
+      </nav>
+    </div>
+    <main class="container py-4 px-0">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, msg in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show">
+              {{ msg }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% if current_user.is_authenticated %}
+    <nav class="mobile-tabbar d-lg-none">
+      <a class="mobile-tab {{ 'active' if request.endpoint == 'main.index' else '' }}" href="{{ url_for('main.index') }}">
+        <span class="mobile-tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 10.5 12 3l9 7.5"></path>
+            <path d="M5.25 9.75V21h13.5V9.75"></path>
+          </svg>
+        </span>
+        <span>首頁</span>
+      </a>
+      <a class="mobile-tab {{ 'active' if request.endpoint and request.endpoint.startswith('booking.') else '' }}" href="{{ url_for('booking.list_bookings') }}">
+        <span class="mobile-tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M12 5v14M5 12h14"></path>
+          </svg>
+        </span>
+        <span>借用</span>
+      </a>
+      <a class="mobile-tab {{ 'active' if request.endpoint and request.endpoint.startswith('calendar.') else '' }}" href="{{ url_for('calendar.month_view') }}">
+        <span class="mobile-tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3.5" y="5" width="17" height="15" rx="3"></rect>
+            <path d="M7.5 3.5v3M16.5 3.5v3M3.5 9.5h17"></path>
+          </svg>
+        </span>
+        <span>行事曆</span>
+      </a>
+      {% if current_user.has_any_role(['super_admin', 'staff_manager', 'workstudy_manager']) %}
+        <a class="mobile-tab {{ 'active' if request.endpoint and request.endpoint.startswith('admin.') else '' }}" href="{{ url_for('admin.dashboard') }}">
+          <span class="mobile-tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3.5 14.3 5l2.7-.4 1.4 2.4 2.4 1.4-.4 2.7L20.5 12l1.5 2.3-.4 2.7-2.4 1.4-1.4 2.4-2.7-.4-2.3 1.5-2.3-1.5-2.7.4-1.4-2.4-2.4-1.4.4-2.7L3.5 12 5 9.7l-.4-2.7L7 5.6l1.4-2.4 2.7.4L12 3.5Z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </span>
+          <span>管理</span>
+        </a>
       {% endif %}
-    {% endwith %}
-    {% block content %}{% endblock %}
-  </main>
+    </nav>
+  {% endif %}
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

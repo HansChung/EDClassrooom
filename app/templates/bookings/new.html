@@ -1,40 +1,248 @@
 {% extends "base.html" %}
 {% block title %}新增借用{% endblock %}
 {% block content %}
-<h2 class="h4 mb-3">新增借用申請</h2>
-<form method="post" class="card card-body">
-  <div class="row g-3">
-    <div class="col-md-4">
-      <label class="form-label">教室</label>
-      <select name="classroom_id" class="form-select" required>
-        {% for room in rooms %}
-          <option value="{{ room.id }}">{{ room.code }} {{ room.name }} ({{ room.capacity }}人)</option>
-        {% endfor %}
-      </select>
+<div class="page-intro">
+  <div>
+    <div class="eyebrow">Booking Flow</div>
+    <h2 class="section-title mb-1">新增借用申請</h2>
+    <div class="section-subtitle">把申請流程整理成更接近 iPhone app 的表單頁，先看空檔，再送出申請。</div>
+  </div>
+  <div class="action-row">
+    <div class="quick-card">
+      <div class="quick-card-title">借用上限</div>
+      <div class="quick-card-value">單次 2 小時</div>
     </div>
-    <div class="col-md-4">
-      <label class="form-label">活動名稱</label>
-      <input name="title" class="form-control" required>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label">預計人數</label>
-      <input name="attendee_count" type="number" class="form-control" min="1" required>
-    </div>
-    <div class="col-md-6">
-      <label class="form-label">開始時間</label>
-      <input name="start_at" type="datetime-local" class="form-control" required>
-    </div>
-    <div class="col-md-6">
-      <label class="form-label">結束時間</label>
-      <input name="end_at" type="datetime-local" class="form-control" required>
-    </div>
-    <div class="col-12">
-      <label class="form-label">用途說明</label>
-      <textarea name="purpose" class="form-control" rows="3" required></textarea>
+    <div class="quick-card">
+      <div class="quick-card-title">顯示空檔</div>
+      <div class="quick-card-value">08:00 - 22:00</div>
     </div>
   </div>
-  <div class="mt-3">
-    <button class="btn btn-primary">送出申請</button>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-7">
+    <div class="phone-sheet p-4">
+      <form method="post">
+        <div class="sheet-section">
+          <span class="section-chip">Step 1 / 基本資訊</span>
+          <div class="row g-3 mt-1">
+            <div class="col-md-6">
+              <div class="ios-field">
+                <label class="form-label">教室</label>
+                <select id="classroom-select" name="classroom_id" class="form-select" required>
+                  {% for room in rooms %}
+                    <option value="{{ room.id }}">{{ room.code }} {{ room.name }} ({{ room.capacity }}人)</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="ios-field">
+                <label class="form-label">活動名稱</label>
+                <input name="title" class="form-control" placeholder="例如：社團錄音、課程討論" required>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="ios-field">
+                <label class="form-label">預計人數</label>
+                <input name="attendee_count" type="number" class="form-control" min="1" placeholder="請輸入人數" required>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="ios-field h-100">
+                <label class="form-label">提醒</label>
+                <div class="muted small">若人數接近教室上限或超過自動核准條件，系統會轉為人工審核。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet-section">
+          <span class="section-chip">Step 2 / 借用時間</span>
+          <div class="row g-3 mt-1">
+            <div class="col-md-6">
+              <div class="ios-field">
+                <label class="form-label">開始時間</label>
+                <input id="start-at" name="start_at" type="datetime-local" class="form-control" required>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="ios-field">
+                <label class="form-label">結束時間</label>
+                <input id="end-at" name="end_at" type="datetime-local" class="form-control" required>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet-section">
+          <span class="section-chip">Step 3 / 用途說明</span>
+          <div class="ios-field mt-2">
+            <label class="form-label">用途說明</label>
+            <textarea name="purpose" class="form-control" rows="4" placeholder="簡單說明借用用途，讓審核者快速理解需求。" required></textarea>
+          </div>
+        </div>
+
+        <div class="sheet-section d-flex justify-content-between align-items-center flex-wrap gap-3">
+          <div class="muted small">送出前先確認右側空檔與已借用時段，避免衝堂。</div>
+          <button class="btn btn-primary">送出申請</button>
+        </div>
+      </form>
+    </div>
   </div>
-</form>
+
+  <div class="col-xl-5">
+    <div class="phone-sheet p-4 booking-availability">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <div>
+          <div class="eyebrow">Live Availability</div>
+          <h3 class="h5 mb-1">可借用時段</h3>
+          <div id="availability-summary" class="text-muted small">請先選教室與開始日期。</div>
+        </div>
+        <span class="badge text-bg-light">Today View</span>
+      </div>
+      <div id="availability-error" class="alert alert-danger d-none py-2 mb-3"></div>
+
+      <div class="sheet-section">
+        <span class="section-chip">空檔</span>
+        <div id="available-slots" class="timeline-list mt-2">
+          <div class="text-muted small">尚未載入。</div>
+        </div>
+      </div>
+
+      <div class="sheet-section">
+        <span class="section-chip">已借用時段</span>
+        <div id="occupied-slots" class="timeline-list mt-2">
+          <div class="text-muted small">尚未載入。</div>
+        </div>
+      </div>
+
+      <div class="sheet-section">
+        <div class="quick-card">
+          <div class="quick-card-title">使用方式</div>
+          <div class="muted small mt-2">點右側空檔即可自動帶入開始與結束時間。系統目前以當日 08:00 至 22:00 作為可借用時間窗。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const classroomSelect = document.querySelector('#classroom-select');
+    const startAtInput = document.querySelector('#start-at');
+    const endAtInput = document.querySelector('#end-at');
+    const summary = document.querySelector('#availability-summary');
+    const errorBox = document.querySelector('#availability-error');
+    const availableSlots = document.querySelector('#available-slots');
+    const occupiedSlots = document.querySelector('#occupied-slots');
+
+    function toLocalInputValue(date) {
+      const offset = date.getTimezoneOffset();
+      const localDate = new Date(date.getTime() - offset * 60 * 1000);
+      return localDate.toISOString().slice(0, 16);
+    }
+
+    function renderEmpty(container, message) {
+      container.innerHTML = `<div class="text-muted small">${message}</div>`;
+    }
+
+    function renderSlots(container, slots, badgeClass, emptyMessage) {
+      if (!slots.length) {
+        renderEmpty(container, emptyMessage);
+        return;
+      }
+
+      container.innerHTML = slots.map((slot) => `
+        <button
+          type="button"
+          class="timeline-item ${badgeClass} availability-slot text-start"
+          data-start="${slot.start}"
+          data-end="${slot.end}"
+        >
+          <div class="timeline-item-top">
+            <strong>${slot.label}</strong>
+            <span class="muted small">${slot.duration || ''}</span>
+          </div>
+        </button>
+      `).join('');
+    }
+
+    function syncDateFromStart() {
+      if (!startAtInput.value && !endAtInput.value) {
+        return;
+      }
+
+      const startDate = startAtInput.value ? startAtInput.value.slice(0, 10) : '';
+      const endDate = endAtInput.value ? endAtInput.value.slice(0, 10) : '';
+      if (startDate && !endDate) {
+        endAtInput.value = `${startDate}T09:00`;
+      }
+    }
+
+    async function loadAvailability() {
+      const classroomId = classroomSelect.value;
+      const startDate = startAtInput.value ? startAtInput.value.slice(0, 10) : '';
+      if (!classroomId || !startDate) {
+        summary.textContent = '請先選教室與開始日期。';
+        errorBox.classList.add('d-none');
+        renderEmpty(availableSlots, '尚未載入。');
+        renderEmpty(occupiedSlots, '尚未載入。');
+        return;
+      }
+
+      summary.textContent = '載入中...';
+      errorBox.classList.add('d-none');
+
+      try {
+        const response = await fetch(`{{ url_for('booking.availability') }}?classroom_id=${classroomId}&date=${startDate}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || '讀取失敗');
+        }
+
+        summary.textContent = `${data.classroom.code} ${data.classroom.name} - ${data.date}`;
+        renderSlots(availableSlots, data.available_slots, 'btn-outline-success', '當日已無可借用空檔。');
+        renderSlots(occupiedSlots, data.occupied_slots, 'btn-outline-secondary', '目前尚無借用。');
+      } catch (error) {
+        summary.textContent = '無法取得可借用時段。';
+        errorBox.textContent = error.message;
+        errorBox.classList.remove('d-none');
+        renderEmpty(availableSlots, '讀取失敗。');
+        renderEmpty(occupiedSlots, '讀取失敗。');
+      }
+    }
+
+    document.addEventListener('click', (event) => {
+      const slotButton = event.target.closest('.availability-slot');
+      if (!slotButton || !slotButton.dataset.start || !slotButton.dataset.end) {
+        return;
+      }
+      startAtInput.value = slotButton.dataset.start.slice(0, 16);
+      endAtInput.value = slotButton.dataset.end.slice(0, 16);
+    });
+
+    classroomSelect.addEventListener('change', loadAvailability);
+    startAtInput.addEventListener('change', () => {
+      syncDateFromStart();
+      loadAvailability();
+    });
+
+    if (!startAtInput.value) {
+      const now = new Date();
+      now.setMinutes(0, 0, 0);
+      if (now.getHours() < 8) {
+        now.setHours(8);
+      } else if (now.getHours() >= 21) {
+        now.setDate(now.getDate() + 1);
+        now.setHours(8);
+      }
+      startAtInput.value = toLocalInputValue(now);
+      const end = new Date(now.getTime() + 60 * 60 * 1000);
+      endAtInput.value = toLocalInputValue(end);
+    }
+
+    loadAvailability();
+  })();
+</script>
 {% endblock %}

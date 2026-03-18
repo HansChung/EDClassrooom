@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timedelta, timezone
+from collections import OrderedDict
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO, StringIO
 
 from flask import Response, render_template, request
@@ -42,7 +43,43 @@ def month_view():
 
     bookings = query.order_by(BookingRequest.start_at.asc()).all()
     rooms = db.session.query(Classroom).filter_by(is_active=True).order_by(Classroom.code.asc()).all()
-    return render_template("calendar/month.html", bookings=bookings, rooms=rooms)
+    grouped_bookings: OrderedDict[str, list[BookingRequest]] = OrderedDict()
+    for booking in bookings:
+        day_key = booking.start_at.strftime("%Y-%m-%d")
+        grouped_bookings.setdefault(day_key, []).append(booking)
+
+    if start:
+        anchor_date = datetime.fromisoformat(start).date()
+    elif bookings:
+        anchor_date = bookings[0].start_at.date()
+    else:
+        anchor_date = date.today()
+
+    week_start = anchor_date - timedelta(days=anchor_date.weekday())
+    weekly_schedule = []
+    for offset in range(7):
+        current_day = week_start + timedelta(days=offset)
+        current_items = [item for item in bookings if item.start_at.date() == current_day]
+        weekly_schedule.append(
+            {
+                "date": current_day,
+                "label": current_day.strftime("%m/%d"),
+                "weekday": current_day.strftime("%a"),
+                "items": current_items,
+            }
+        )
+
+    return render_template(
+        "calendar/month.html",
+        bookings=bookings,
+        grouped_bookings=grouped_bookings.items(),
+        rooms=rooms,
+        selected_start=start or "",
+        selected_end=end or "",
+        selected_room_id=room_id,
+        weekly_schedule=weekly_schedule,
+        week_range_label=f"{week_start.strftime('%Y/%m/%d')} - {(week_start + timedelta(days=6)).strftime('%Y/%m/%d')}",
+    )
 
 
 @bp.route("/export/ics")
