@@ -1,0 +1,6 @@
+name: tku-etd-classroom-booking
+services:
+  web:
+    project: .
+    language: python
+    host: appservice

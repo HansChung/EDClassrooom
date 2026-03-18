@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}借用紀錄{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h4 mb-0">借用紀錄</h2>
+  <a href="{{ url_for('booking.new_booking') }}" class="btn btn-primary">新增借用</a>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>教室</th>
+        <th>活動</th>
+        <th>時間</th>
+        <th>狀態</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in bookings %}
+        <tr>
+          <td>#{{ item.id }}</td>
+          <td>{{ item.classroom.code }} {{ item.classroom.name }}</td>
+          <td>{{ item.title }}</td>
+          <td>{{ item.start_at }}<br>{{ item.end_at }}</td>
+          <td>{{ item.status }}</td>
+          <td>
+            {% if item.status in ["approved", "pending_approval", "pending"] %}
+              <form method="post" action="{{ url_for('booking.cancel', booking_id=item.id) }}">
+                <input type="hidden" name="reason" value="使用者取消">
+                <button class="btn btn-sm btn-outline-danger">取消</button>
+              </form>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6">目前沒有借用資料</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

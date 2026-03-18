@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}審核佇列{% endblock %}
+{% block content %}
+<h2 class="h4 mb-3">高風險案件審核</h2>
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>申請人</th>
+        <th>教室</th>
+        <th>時間</th>
+        <th>用途</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in bookings %}
+        <tr>
+          <td>#{{ item.id }}</td>
+          <td>{{ item.requester.display_name }}</td>
+          <td>{{ item.classroom.code }} {{ item.classroom.name }}</td>
+          <td>{{ item.start_at }}<br>{{ item.end_at }}</td>
+          <td>{{ item.purpose }}</td>
+          <td>
+            <form method="post" action="{{ url_for('approval.action', booking_id=item.id) }}" class="d-flex gap-2">
+              <input type="text" name="comment" class="form-control form-control-sm" placeholder="備註">
+              <button class="btn btn-sm btn-success" name="action" value="approved">核准</button>
+              <button class="btn btn-sm btn-outline-danger" name="action" value="rejected">駁回</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6">目前沒有待審核案件</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

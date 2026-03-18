@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}首頁 - 教室借用系統{% endblock %}
+{% block content %}
+<div class="p-4 mb-4 bg-light rounded-3 border">
+  <h1 class="h3">淡江大學教育科技學系教室借用系統</h1>
+  <p class="mb-1">僅提供 Office 365 單一登入，不需註冊。</p>
+  <p class="mb-0 text-muted">使用教室時，請出示借用紀錄，憑學生證找工頭或系辦開啟教室。</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header">可線上借用教室</div>
+      <ul class="list-group list-group-flush">
+        {% for room in online_rooms %}
+          <li class="list-group-item d-flex justify-content-between">
+            <span>{{ room.code }} {{ room.name }}</span>
+            <span class="text-muted">{{ room.capacity }} 人</span>
+          </li>
+        {% else %}
+          <li class="list-group-item">尚無資料</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <span>我的最新借用</span>
+        {% if current_user.is_authenticated %}
+          <a class="btn btn-sm btn-primary" href="{{ url_for('booking.new_booking') }}">新增借用</a>
+        {% endif %}
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for item in latest_bookings %}
+          <li class="list-group-item">
+            <div>{{ item.classroom.code }} - {{ item.title }}</div>
+            <small class="text-muted">{{ item.start_at }} ~ {{ item.end_at }} / {{ item.status }}</small>
+          </li>
+        {% else %}
+          <li class="list-group-item">尚無借用紀錄</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
