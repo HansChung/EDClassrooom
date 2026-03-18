@@ -74,10 +74,10 @@ python run.py
 在 App Service 設定 Startup Command：
 
 ```bash
-gunicorn --bind=0.0.0.0 --timeout 600 run:app
+bash startup.sh
 ```
 
-（對應 `startup.txt`）
+`startup.sh` 會在 SQLite 模式下先自動建立資料表與匯入預設資料，再啟動 Gunicorn。
 
 ## 6. 核心路由
 

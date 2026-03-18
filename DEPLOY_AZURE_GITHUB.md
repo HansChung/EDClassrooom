@@ -35,8 +35,15 @@ git config user.email "你的 GitHub Email"
 在 Azure Portal > App Service > Configuration > General settings：
 
 ```bash
-gunicorn --bind=0.0.0.0 --timeout 600 run:app
+bash startup.sh
 ```
+
+`startup.sh` 會在使用 SQLite 時自動執行初始化：
+
+- `flask --app run.py init-db`
+- `flask --app run.py seed-defaults`
+
+如果之後改用 PostgreSQL，腳本會直接跳過 SQLite 初始化，只啟動 Gunicorn。
 
 ## 4. Azure App Service 需要設定的 Application Settings
 
