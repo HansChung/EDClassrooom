@@ -4,7 +4,7 @@
 {% set export_room_id = selected_room_id if selected_room_id else None %}
 <div class="page-intro">
   <div>
-    <div class="eyebrow">Calendar View</div>
+    <div class="eyebrow">行事曆檢視</div>
     <h2 class="section-title mb-1">借用行事曆</h2>
     <div class="section-subtitle">改成更像 iPhone app 的日程卡片，先看每天有哪些借用，再決定下一步。</div>
   </div>
@@ -80,17 +80,17 @@
         <div class="day-card-title">本週視圖</div>
         <div class="day-card-subtitle">{{ week_range_label }}</div>
       </div>
-      <span class="badge text-bg-light">Weekly Timeline</span>
+      <span class="badge text-bg-light">本週時程</span>
     </div>
     <div class="week-strip">
       {% for day in weekly_schedule %}
         <div class="week-day-card">
           <div class="week-day-head">
-            <div class="week-day-name">{{ day.weekday }}</div>
-            <div class="week-day-date">{{ day.label }}</div>
+            <div class="week-day-name">{{ day["weekday"] }}</div>
+            <div class="week-day-date">{{ day["label"] }}</div>
           </div>
           <div class="week-slot-list">
-            {% for item in day.items %}
+            {% for item in day["items"] %}
               <div class="week-slot">
                 <div class="week-slot-time">{{ item.start_at.strftime("%H:%M") }} - {{ item.end_at.strftime("%H:%M") }}</div>
                 <div class="week-slot-title">{{ item.title }}</div>
@@ -114,7 +114,7 @@
           <div class="day-card-title">{{ day_key }}</div>
           <div class="day-card-subtitle">{{ day_items|length }} 筆借用</div>
         </div>
-        <span class="badge text-bg-light">Daily Schedule</span>
+        <span class="badge text-bg-light">當日時程</span>
       </div>
       <div class="schedule-list">
         {% for item in day_items %}

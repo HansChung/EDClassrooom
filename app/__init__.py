@@ -12,6 +12,7 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     register_extensions(app)
     register_blueprints(app)
     register_cli(app)
+    bootstrap_sqlite_demo(app)
 
     return app
 
@@ -51,6 +52,18 @@ def register_cli(app: Flask) -> None:
     from app.seed import register_seed_commands
 
     register_seed_commands(app)
+
+
+def bootstrap_sqlite_demo(app: Flask) -> None:
+    database_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if not database_uri.startswith("sqlite"):
+        return
+
+    with app.app_context():
+        from app.seed import init_db_schema, seed_default_data
+
+        init_db_schema()
+        seed_default_data()
 
 
 @login_manager.user_loader

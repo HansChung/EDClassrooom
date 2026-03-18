@@ -34,33 +34,41 @@ DEFAULT_CLASSROOMS = [
 ]
 
 
+def init_db_schema() -> None:
+    db.create_all()
+
+
+def seed_default_data() -> None:
+    for name, desc in DEFAULT_ROLES:
+        if db.session.query(Role).filter_by(name=name).first() is None:
+            db.session.add(Role(name=name, description=desc))
+
+    for key, value, desc in DEFAULT_RULES:
+        if db.session.query(SystemRule).filter_by(key=key).first() is None:
+            db.session.add(SystemRule(key=key, value=value, description=desc))
+
+    for code, name, location, capacity, is_online_bookable, note in DEFAULT_CLASSROOMS:
+        if db.session.query(Classroom).filter_by(code=code).first() is None:
+            db.session.add(
+                Classroom(
+                    code=code,
+                    name=name,
+                    location=location,
+                    capacity=capacity,
+                    is_online_bookable=is_online_bookable,
+                    note=note,
+                )
+            )
+    db.session.commit()
+
+
 def register_seed_commands(app: Flask) -> None:
     @app.cli.command("init-db")
     def init_db():
-        db.create_all()
+        init_db_schema()
         click.echo("資料表建立完成。")
 
     @app.cli.command("seed-defaults")
     def seed_defaults():
-        for name, desc in DEFAULT_ROLES:
-            if db.session.query(Role).filter_by(name=name).first() is None:
-                db.session.add(Role(name=name, description=desc))
-
-        for key, value, desc in DEFAULT_RULES:
-            if db.session.query(SystemRule).filter_by(key=key).first() is None:
-                db.session.add(SystemRule(key=key, value=value, description=desc))
-
-        for code, name, location, capacity, is_online_bookable, note in DEFAULT_CLASSROOMS:
-            if db.session.query(Classroom).filter_by(code=code).first() is None:
-                db.session.add(
-                    Classroom(
-                        code=code,
-                        name=name,
-                        location=location,
-                        capacity=capacity,
-                        is_online_bookable=is_online_bookable,
-                        note=note,
-                    )
-                )
-        db.session.commit()
+        seed_default_data()
         click.echo("預設角色、規則與教室已匯入。")
