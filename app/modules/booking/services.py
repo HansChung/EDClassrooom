@@ -6,7 +6,7 @@ from datetime import date, datetime, time
 from sqlalchemy import and_, func
 
 from app.extensions import db
-from app.models import AuditLog, BookingRequest, Classroom, SystemRule, User
+from app.models import AuditLog, BookingRequest, Classroom, CourseSchedule, SystemRule, User
 
 
 @dataclass
@@ -20,6 +20,8 @@ class BookingValidationResult:
 class TimeSlot:
     start_at: datetime
     end_at: datetime
+    source: str = "booking"
+    label: str = ""
 
 
 def _get_room_bookings_for_window(
@@ -40,6 +42,44 @@ def _get_room_bookings_for_window(
     )
 
 
+def _get_room_schedule_slots(*, classroom_id: int, target_date: date) -> list[TimeSlot]:
+    schedules = (
+        db.session.query(CourseSchedule)
+        .filter(
+            CourseSchedule.classroom_id == classroom_id,
+            CourseSchedule.is_active.is_(True),
+            CourseSchedule.weekday == target_date.weekday(),
+        )
+        .order_by(CourseSchedule.start_time.asc())
+        .all()
+    )
+    return [
+        TimeSlot(
+            start_at=datetime.combine(target_date, item.start_time),
+            end_at=datetime.combine(target_date, item.end_time),
+            source="schedule",
+            label=item.course_name,
+        )
+        for item in schedules
+    ]
+
+
+def _merge_occupied_slots(slots: list[TimeSlot]) -> list[TimeSlot]:
+    merged: list[TimeSlot] = []
+    for slot in sorted(slots, key=lambda item: item.start_at):
+        if not merged or merged[-1].end_at <= slot.start_at:
+            merged.append(slot)
+            continue
+
+        previous = merged[-1]
+        previous.end_at = max(previous.end_at, slot.end_at)
+        if previous.source != slot.source:
+            previous.source = "mixed"
+        if slot.label:
+            previous.label = ", ".join(filter(None, {previous.label, slot.label}))
+    return merged
+
+
 def list_room_availability(*, classroom_id: int, target_date: date) -> tuple[list[TimeSlot], list[TimeSlot]]:
     day_start = datetime.combine(target_date, time(hour=8))
     day_end = datetime.combine(target_date, time(hour=22))
@@ -49,13 +89,19 @@ def list_room_availability(*, classroom_id: int, target_date: date) -> tuple[lis
         end_at=day_end,
     )
 
-    occupied_slots = [
+    booking_slots = [
         TimeSlot(
             start_at=max(booking.start_at, day_start),
             end_at=min(booking.end_at, day_end),
+            source="booking",
+            label=booking.title,
         )
         for booking in bookings
     ]
+    schedule_slots = _get_room_schedule_slots(classroom_id=classroom_id, target_date=target_date)
+    occupied_slots = _merge_occupied_slots(
+        [slot for slot in booking_slots + schedule_slots if slot.end_at > day_start and slot.start_at < day_end]
+    )
 
     available_slots: list[TimeSlot] = []
     cursor = day_start
@@ -69,6 +115,25 @@ def list_room_availability(*, classroom_id: int, target_date: date) -> tuple[lis
         available_slots.append(TimeSlot(start_at=cursor, end_at=day_end))
 
     return occupied_slots, available_slots
+
+
+def has_schedule_conflict(*, classroom_id: int, start_at: datetime, end_at: datetime) -> CourseSchedule | None:
+    weekday = start_at.weekday()
+    candidate_schedules = (
+        db.session.query(CourseSchedule)
+        .filter(
+            CourseSchedule.classroom_id == classroom_id,
+            CourseSchedule.is_active.is_(True),
+            CourseSchedule.weekday == weekday,
+        )
+        .all()
+    )
+    start_time = start_at.time()
+    end_time = end_at.time()
+    for item in candidate_schedules:
+        if item.start_time < end_time and item.end_time > start_time:
+            return item
+    return None
 
 
 def get_int_rule(key: str, default: int) -> int:
@@ -133,6 +198,20 @@ def validate_booking(
     )
     if conflict_exists:
         return BookingValidationResult(False, reason="該時段已有借用，請改選其他時間。")
+
+    schedule_conflict = has_schedule_conflict(
+        classroom_id=classroom.id,
+        start_at=start_at,
+        end_at=end_at,
+    )
+    if schedule_conflict is not None:
+        return BookingValidationResult(
+            False,
+            reason=(
+                f"該時段有課程《{schedule_conflict.course_name}》"
+                f"（{schedule_conflict.start_time:%H:%M}-{schedule_conflict.end_time:%H:%M}），不可借用。"
+            ),
+        )
 
     risk_level = "low"
     auto_approve_max_hours = get_int_rule("auto_approve_max_hours", 2)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any
 
 from flask_login import UserMixin
@@ -78,6 +78,31 @@ class Classroom(db.Model):
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
     bookings: Mapped[list["BookingRequest"]] = relationship(back_populates="classroom")
+    schedules: Mapped[list["CourseSchedule"]] = relationship(back_populates="classroom")
+
+
+class CourseSchedule(db.Model):
+    __tablename__ = "course_schedules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    classroom_id: Mapped[int] = mapped_column(
+        db.ForeignKey("classrooms.id"), nullable=False, index=True
+    )
+    course_name: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    instructor_name: Mapped[str | None] = mapped_column(db.String(120), nullable=True)
+    weekday: Mapped[int] = mapped_column(nullable=False, index=True)
+    start_time: Mapped[time] = mapped_column(nullable=False)
+    end_time: Mapped[time] = mapped_column(nullable=False)
+    semester_label: Mapped[str] = mapped_column(db.String(80), nullable=False, default="current")
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    classroom: Mapped[Classroom] = relationship(back_populates="schedules")
 
 
 class BookingRequest(db.Model):

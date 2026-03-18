@@ -92,9 +92,9 @@
           <div class="week-slot-list">
             {% for item in day["items"] %}
               <div class="week-slot">
-                <div class="week-slot-time">{{ item.start_at.strftime("%H:%M") }} - {{ item.end_at.strftime("%H:%M") }}</div>
-                <div class="week-slot-title">{{ item.title }}</div>
-                <div class="week-slot-room">{{ item.classroom.code }} / {{ item.requester.display_name }}</div>
+                <div class="week-slot-time">{{ item["start_at"].strftime("%H:%M") }} - {{ item["end_at"].strftime("%H:%M") }}</div>
+                <div class="week-slot-title">{{ item["title"] }}</div>
+                <div class="week-slot-room">{{ item["room_code"] }} / {{ item["requester_name"] }} / {{ '課表' if item["kind"] == 'schedule' else '借用' }}</div>
               </div>
             {% else %}
               <div class="week-slot">
@@ -119,13 +119,13 @@
       <div class="schedule-list">
         {% for item in day_items %}
           <article class="schedule-item">
-            <div class="schedule-time">{{ item.start_at.strftime("%H:%M") }} - {{ item.end_at.strftime("%H:%M") }}</div>
+            <div class="schedule-time">{{ item["start_at"].strftime("%H:%M") }} - {{ item["end_at"].strftime("%H:%M") }}</div>
             <div>
-              <div><strong>{{ item.classroom.code }} {{ item.title }}</strong></div>
-              <div class="schedule-meta">{{ item.requester.display_name }} / {{ item.classroom.name }} / {{ item.source }}</div>
+              <div><strong>{{ item["room_code"] }} {{ item["title"] }}</strong></div>
+              <div class="schedule-meta">{{ item["subtitle"] }}</div>
             </div>
             <div class="d-flex justify-content-end">
-              <span class="status-badge status-{{ item.status }}">{{ item.status }}</span>
+              <span class="status-badge status-{{ item["status"] }}">{{ '課表' if item["kind"] == 'schedule' else item["status"] }}</span>
             </div>
           </article>
         {% endfor %}

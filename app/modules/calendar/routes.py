@@ -13,13 +13,32 @@ from odf.text import P
 from openpyxl import Workbook
 
 from app.extensions import db
-from app.models import BookingRequest, Classroom
+from app.models import BookingRequest, Classroom, CourseSchedule
 from app.modules.calendar import bp
 
 
 def _to_ics_dt(value: datetime) -> str:
     utc_time = value.replace(tzinfo=timezone.utc)
     return utc_time.strftime("%Y%m%dT%H%M%SZ")
+
+
+def _resolve_calendar_window(start: str | None, end: str | None, bookings: list[BookingRequest]) -> tuple[date, date]:
+    if start:
+        window_start = datetime.fromisoformat(start).date()
+    elif bookings:
+        window_start = bookings[0].start_at.date()
+    else:
+        today = date.today()
+        window_start = today - timedelta(days=today.weekday())
+
+    if end:
+        window_end = datetime.fromisoformat(end).date()
+    elif bookings:
+        window_end = max(window_start, bookings[-1].start_at.date())
+    else:
+        window_end = window_start + timedelta(days=6)
+
+    return window_start, window_end
 
 
 @bp.route("/")
@@ -42,24 +61,63 @@ def month_view():
         query = query.filter(BookingRequest.requester_id == current_user.id)
 
     bookings = query.order_by(BookingRequest.start_at.asc()).all()
+    window_start, window_end = _resolve_calendar_window(start, end, bookings)
     rooms = db.session.query(Classroom).filter_by(is_active=True).order_by(Classroom.code.asc()).all()
-    grouped_bookings: OrderedDict[str, list[BookingRequest]] = OrderedDict()
+    schedule_query = db.session.query(CourseSchedule).filter(CourseSchedule.is_active.is_(True))
+    if room_id:
+        schedule_query = schedule_query.filter(CourseSchedule.classroom_id == room_id)
+    schedules = schedule_query.order_by(CourseSchedule.weekday.asc(), CourseSchedule.start_time.asc()).all()
+
+    daily_entries: OrderedDict[str, list[dict]] = OrderedDict()
     for booking in bookings:
         day_key = booking.start_at.strftime("%Y-%m-%d")
-        grouped_bookings.setdefault(day_key, []).append(booking)
+        daily_entries.setdefault(day_key, []).append(
+            {
+                "kind": "booking",
+                "start_at": booking.start_at,
+                "end_at": booking.end_at,
+                "title": booking.title,
+                "subtitle": f"{booking.requester.display_name} / {booking.classroom.name} / {booking.source}",
+                "status": booking.status,
+                "room_code": booking.classroom.code,
+                "requester_name": booking.requester.display_name,
+            }
+        )
 
-    if start:
-        anchor_date = datetime.fromisoformat(start).date()
-    elif bookings:
-        anchor_date = bookings[0].start_at.date()
-    else:
-        anchor_date = date.today()
+    current_date = window_start
+    while current_date <= window_end:
+        for schedule in schedules:
+            if schedule.weekday != current_date.weekday():
+                continue
+            start_at = datetime.combine(current_date, schedule.start_time)
+            end_at = datetime.combine(current_date, schedule.end_time)
+            day_key = current_date.strftime("%Y-%m-%d")
+            daily_entries.setdefault(day_key, []).append(
+                {
+                    "kind": "schedule",
+                    "start_at": start_at,
+                    "end_at": end_at,
+                    "title": schedule.course_name,
+                    "subtitle": f"{schedule.classroom.name} / {schedule.instructor_name or '未填教師'} / 課表",
+                    "status": "approved",
+                    "room_code": schedule.classroom.code,
+                    "requester_name": schedule.instructor_name or "課程",
+                }
+            )
+        current_date += timedelta(days=1)
+
+    grouped_entries: OrderedDict[str, list[dict]] = OrderedDict()
+    for day_key in sorted(daily_entries.keys()):
+        grouped_entries[day_key] = sorted(daily_entries[day_key], key=lambda item: item["start_at"])
+
+    anchor_date = window_start
 
     week_start = anchor_date - timedelta(days=anchor_date.weekday())
     weekly_schedule = []
     for offset in range(7):
         current_day = week_start + timedelta(days=offset)
-        current_items = [item for item in bookings if item.start_at.date() == current_day]
+        day_key = current_day.strftime("%Y-%m-%d")
+        current_items = grouped_entries.get(day_key, [])
         weekly_schedule.append(
             {
                 "date": current_day,
@@ -72,7 +130,7 @@ def month_view():
     return render_template(
         "calendar/month.html",
         bookings=bookings,
-        grouped_bookings=grouped_bookings.items(),
+        grouped_bookings=grouped_entries.items(),
         rooms=rooms,
         selected_start=start or "",
         selected_end=end or "",

@@ -121,6 +121,8 @@ def availability():
                     "end": slot.end_at.isoformat(),
                     "label": _format_slot(slot.start_at, slot.end_at),
                     "duration": _format_slot_duration(slot.start_at, slot.end_at),
+                    "source": slot.source,
+                    "title": slot.label,
                 }
                 for slot in occupied_slots
             ],
@@ -130,6 +132,8 @@ def availability():
                     "end": slot.end_at.isoformat(),
                     "label": _format_slot(slot.start_at, slot.end_at),
                     "duration": _format_slot_duration(slot.start_at, slot.end_at),
+                    "source": slot.source,
+                    "title": slot.label,
                 }
                 for slot in available_slots
             ],

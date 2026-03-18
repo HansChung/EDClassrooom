@@ -3,8 +3,9 @@
 {% block content %}
 <div class="mb-3">
   <h2 class="section-title mb-1">管理後台</h2>
-  <div class="section-subtitle">管理教室、借用規則、人工登記與角色權限。</div>
+  <div class="section-subtitle">管理教室、借用規則、課表、人工登記與角色權限。</div>
 </div>
+{% set weekday_labels = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'] %}
 <div class="row g-4">
   <div class="col-lg-6">
     <div class="card card-body">
@@ -47,6 +48,69 @@
           <li><code>{{ rule.key }}</code> = {{ rule.value }}（{{ rule.description }}）</li>
         {% endfor %}
       </ul>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card card-body">
+      <h3 class="h6">課表管理</h3>
+      <form method="post" action="{{ url_for('admin.upsert_schedule') }}" class="row g-2">
+        <div class="col-md-2">
+          <label class="form-label">教室</label>
+          <select name="classroom_id" class="form-select" required>
+            {% for room in rooms %}
+              <option value="{{ room.id }}">{{ room.code }} {{ room.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2"><label class="form-label">課程名稱</label><input name="course_name" class="form-control" required></div>
+        <div class="col-md-2"><label class="form-label">教師</label><input name="instructor_name" class="form-control"></div>
+        <div class="col-md-2">
+          <label class="form-label">星期</label>
+          <select name="weekday" class="form-select" required>
+            {% for label in weekday_labels %}
+              <option value="{{ loop.index0 }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2"><label class="form-label">開始</label><input type="time" name="start_time" class="form-control" required></div>
+        <div class="col-md-2"><label class="form-label">結束</label><input type="time" name="end_time" class="form-control" required></div>
+        <div class="col-md-3"><label class="form-label">學期標記</label><input name="semester_label" class="form-control" placeholder="例如：114-2"></div>
+        <div class="col-md-3 d-flex align-items-end">
+          <label class="form-check-label">
+            <input type="checkbox" name="is_active" class="form-check-input" checked>
+            啟用此課表
+          </label>
+        </div>
+        <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100">儲存課表</button></div>
+      </form>
+      <div class="table-shell table-responsive mt-3">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr><th>教室</th><th>課程</th><th>教師</th><th>星期</th><th>時間</th><th>學期</th><th>狀態</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            {% for item in schedules %}
+              <tr>
+                <td>{{ item.classroom.code }}</td>
+                <td>{{ item.course_name }}</td>
+                <td>{{ item.instructor_name or '-' }}</td>
+                <td>{{ weekday_labels[item.weekday] }}</td>
+                <td>{{ item.start_time.strftime("%H:%M") }} - {{ item.end_time.strftime("%H:%M") }}</td>
+                <td>{{ item.semester_label }}</td>
+                <td><span class="status-badge status-{{ 'approved' if item.is_active else 'cancelled' }}">{{ '啟用' if item.is_active else '停用' }}</span></td>
+                <td>
+                  <form method="post" action="{{ url_for('admin.delete_schedule', schedule_id=item.id) }}">
+                    <button class="btn btn-sm btn-outline-danger">刪除</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="8">目前沒有課表資料</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
