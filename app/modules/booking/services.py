@@ -6,7 +6,7 @@ from datetime import date, datetime, time
 from sqlalchemy import and_, func
 
 from app.extensions import db
-from app.models import AuditLog, BookingRequest, Classroom, CourseSchedule, SystemRule, User
+from app.models import AuditLog, BookingRequest, Classroom, ClassroomBlock, CourseSchedule, SystemRule, User
 
 
 @dataclass
@@ -64,6 +64,31 @@ def _get_room_schedule_slots(*, classroom_id: int, target_date: date) -> list[Ti
     ]
 
 
+def _get_room_block_slots(*, classroom_id: int, target_date: date) -> list[TimeSlot]:
+    day_start = datetime.combine(target_date, time.min)
+    day_end = datetime.combine(target_date, time.max)
+    blocks = (
+        db.session.query(ClassroomBlock)
+        .filter(
+            ClassroomBlock.classroom_id == classroom_id,
+            ClassroomBlock.is_active.is_(True),
+            ClassroomBlock.start_at < day_end,
+            ClassroomBlock.end_at > day_start,
+        )
+        .order_by(ClassroomBlock.start_at.asc())
+        .all()
+    )
+    return [
+        TimeSlot(
+            start_at=max(item.start_at, datetime.combine(target_date, time(hour=8))),
+            end_at=min(item.end_at, datetime.combine(target_date, time(hour=22))),
+            source="block",
+            label=item.title,
+        )
+        for item in blocks
+    ]
+
+
 def _merge_occupied_slots(slots: list[TimeSlot]) -> list[TimeSlot]:
     merged: list[TimeSlot] = []
     for slot in sorted(slots, key=lambda item: item.start_at):
@@ -99,8 +124,13 @@ def list_room_availability(*, classroom_id: int, target_date: date) -> tuple[lis
         for booking in bookings
     ]
     schedule_slots = _get_room_schedule_slots(classroom_id=classroom_id, target_date=target_date)
+    block_slots = _get_room_block_slots(classroom_id=classroom_id, target_date=target_date)
     occupied_slots = _merge_occupied_slots(
-        [slot for slot in booking_slots + schedule_slots if slot.end_at > day_start and slot.start_at < day_end]
+        [
+            slot
+            for slot in booking_slots + schedule_slots + block_slots
+            if slot.end_at > day_start and slot.start_at < day_end
+        ]
     )
 
     available_slots: list[TimeSlot] = []
@@ -134,6 +164,20 @@ def has_schedule_conflict(*, classroom_id: int, start_at: datetime, end_at: date
         if item.start_time < end_time and item.end_time > start_time:
             return item
     return None
+
+
+def has_block_conflict(*, classroom_id: int, start_at: datetime, end_at: datetime) -> ClassroomBlock | None:
+    return (
+        db.session.query(ClassroomBlock)
+        .filter(
+            ClassroomBlock.classroom_id == classroom_id,
+            ClassroomBlock.is_active.is_(True),
+            ClassroomBlock.start_at < end_at,
+            ClassroomBlock.end_at > start_at,
+        )
+        .order_by(ClassroomBlock.start_at.asc())
+        .first()
+    )
 
 
 def get_int_rule(key: str, default: int) -> int:
@@ -210,6 +254,20 @@ def validate_booking(
             reason=(
                 f"該時段有課程《{schedule_conflict.course_name}》"
                 f"（{schedule_conflict.start_time:%H:%M}-{schedule_conflict.end_time:%H:%M}），不可借用。"
+            ),
+        )
+
+    block_conflict = has_block_conflict(
+        classroom_id=classroom.id,
+        start_at=start_at,
+        end_at=end_at,
+    )
+    if block_conflict is not None:
+        return BookingValidationResult(
+            False,
+            reason=(
+                f"該時段教室停用《{block_conflict.title}》"
+                f"（{block_conflict.start_at:%Y-%m-%d %H:%M}-{block_conflict.end_at:%H:%M}），不可借用。"
             ),
         )
 

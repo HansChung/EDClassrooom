@@ -79,6 +79,7 @@ class Classroom(db.Model):
 
     bookings: Mapped[list["BookingRequest"]] = relationship(back_populates="classroom")
     schedules: Mapped[list["CourseSchedule"]] = relationship(back_populates="classroom")
+    blocks: Mapped[list["ClassroomBlock"]] = relationship(back_populates="classroom")
 
 
 class CourseSchedule(db.Model):
@@ -103,6 +104,29 @@ class CourseSchedule(db.Model):
     )
 
     classroom: Mapped[Classroom] = relationship(back_populates="schedules")
+
+
+class ClassroomBlock(db.Model):
+    __tablename__ = "classroom_blocks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    classroom_id: Mapped[int] = mapped_column(
+        db.ForeignKey("classrooms.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    reason: Mapped[str | None] = mapped_column(db.String(500), nullable=True)
+    block_type: Mapped[str] = mapped_column(db.String(30), nullable=False, default="maintenance")
+    start_at: Mapped[datetime] = mapped_column(nullable=False, index=True)
+    end_at: Mapped[datetime] = mapped_column(nullable=False, index=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    classroom: Mapped[Classroom] = relationship(back_populates="blocks")
 
 
 class BookingRequest(db.Model):

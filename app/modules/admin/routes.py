@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import csv
 from datetime import datetime
+from io import StringIO
 
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.extensions import db
-from app.models import Classroom, CourseSchedule, Role, SystemRule, User
+from app.models import Classroom, ClassroomBlock, CourseSchedule, Role, SystemRule, User
 from app.modules.admin import bp
 from app.modules.booking.services import create_booking
 from app.security import roles_required
@@ -25,12 +27,19 @@ def dashboard():
         .order_by(Classroom.code.asc(), CourseSchedule.weekday.asc(), CourseSchedule.start_time.asc())
         .all()
     )
+    blocks = (
+        db.session.query(ClassroomBlock)
+        .join(Classroom)
+        .order_by(ClassroomBlock.start_at.asc(), Classroom.code.asc())
+        .all()
+    )
     return render_template(
         "admin/dashboard.html",
         rooms=rooms,
         rules=rules,
         users=users,
         schedules=schedules,
+        blocks=blocks,
     )
 
 
@@ -171,4 +180,125 @@ def delete_schedule(schedule_id: int):
     db.session.delete(schedule)
     db.session.commit()
     flash("課表已刪除。", "info")
+    return redirect(url_for("admin.dashboard"))
+
+
+@bp.route("/schedules/import", methods=["POST"])
+@login_required
+@roles_required("super_admin", "staff_manager")
+def import_schedules():
+    file = request.files.get("schedule_file")
+    if file is None or not file.filename:
+        flash("請選擇要匯入的 CSV 檔案。", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    try:
+        content = file.read().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        flash("CSV 檔案編碼需為 UTF-8。", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    reader = csv.DictReader(StringIO(content))
+    required_columns = {
+        "classroom_code",
+        "course_name",
+        "instructor_name",
+        "weekday",
+        "start_time",
+        "end_time",
+        "semester_label",
+        "is_active",
+    }
+    if not reader.fieldnames or not required_columns.issubset(set(reader.fieldnames)):
+        flash("CSV 欄位不足，需包含 classroom_code, course_name, instructor_name, weekday, start_time, end_time, semester_label, is_active。", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    imported = 0
+    skipped = 0
+    for row in reader:
+        try:
+            classroom_code = (row.get("classroom_code") or "").strip().upper()
+            classroom = db.session.query(Classroom).filter_by(code=classroom_code).first()
+            if classroom is None:
+                skipped += 1
+                continue
+
+            course_name = (row.get("course_name") or "").strip()
+            if not course_name:
+                skipped += 1
+                continue
+
+            weekday = int((row.get("weekday") or "0").strip())
+            if weekday < 0 or weekday > 6:
+                skipped += 1
+                continue
+
+            start_time = datetime.strptime((row.get("start_time") or "").strip(), "%H:%M").time()
+            end_time = datetime.strptime((row.get("end_time") or "").strip(), "%H:%M").time()
+            if start_time >= end_time:
+                skipped += 1
+                continue
+
+            schedule = CourseSchedule(
+                classroom_id=classroom.id,
+                course_name=course_name,
+                instructor_name=(row.get("instructor_name") or "").strip() or None,
+                weekday=weekday,
+                start_time=start_time,
+                end_time=end_time,
+                semester_label=(row.get("semester_label") or "").strip() or "current",
+                is_active=(row.get("is_active") or "").strip().lower() in {"1", "true", "yes", "y"},
+            )
+            db.session.add(schedule)
+            imported += 1
+        except (TypeError, ValueError):
+            skipped += 1
+
+    db.session.commit()
+    flash(f"課表匯入完成，新增 {imported} 筆，略過 {skipped} 筆。", "success")
+    return redirect(url_for("admin.dashboard"))
+
+
+@bp.route("/blocks", methods=["POST"])
+@login_required
+@roles_required("super_admin", "staff_manager")
+def upsert_block():
+    classroom = db.session.get(Classroom, int(request.form["classroom_id"]))
+    if classroom is None:
+        flash("找不到教室。", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    start_at = datetime.strptime(request.form["start_at"], "%Y-%m-%dT%H:%M")
+    end_at = datetime.strptime(request.form["end_at"], "%Y-%m-%dT%H:%M")
+    if start_at >= end_at:
+        flash("停用結束時間需晚於開始時間。", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    block = ClassroomBlock(
+        classroom_id=classroom.id,
+        title=request.form["title"].strip(),
+        reason=request.form.get("reason", "").strip() or None,
+        block_type=request.form.get("block_type", "maintenance").strip() or "maintenance",
+        start_at=start_at,
+        end_at=end_at,
+        is_active=request.form.get("is_active") == "on",
+    )
+    db.session.add(block)
+    db.session.commit()
+    flash("教室停用時段已建立。", "success")
+    return redirect(url_for("admin.dashboard"))
+
+
+@bp.route("/blocks/<int:block_id>/delete", methods=["POST"])
+@login_required
+@roles_required("super_admin", "staff_manager")
+def delete_block(block_id: int):
+    block = db.session.get(ClassroomBlock, block_id)
+    if block is None:
+        flash("找不到停用時段。", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    db.session.delete(block)
+    db.session.commit()
+    flash("停用時段已刪除。", "info")
     return redirect(url_for("admin.dashboard"))

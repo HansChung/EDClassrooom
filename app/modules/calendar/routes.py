@@ -13,7 +13,7 @@ from odf.text import P
 from openpyxl import Workbook
 
 from app.extensions import db
-from app.models import BookingRequest, Classroom, CourseSchedule
+from app.models import BookingRequest, Classroom, ClassroomBlock, CourseSchedule
 from app.modules.calendar import bp
 
 
@@ -67,6 +67,14 @@ def month_view():
     if room_id:
         schedule_query = schedule_query.filter(CourseSchedule.classroom_id == room_id)
     schedules = schedule_query.order_by(CourseSchedule.weekday.asc(), CourseSchedule.start_time.asc()).all()
+    block_query = db.session.query(ClassroomBlock).filter(
+        ClassroomBlock.is_active.is_(True),
+        ClassroomBlock.start_at < datetime.combine(window_end + timedelta(days=1), datetime.min.time()),
+        ClassroomBlock.end_at > datetime.combine(window_start, datetime.min.time()),
+    )
+    if room_id:
+        block_query = block_query.filter(ClassroomBlock.classroom_id == room_id)
+    blocks = block_query.order_by(ClassroomBlock.start_at.asc()).all()
 
     daily_entries: OrderedDict[str, list[dict]] = OrderedDict()
     for booking in bookings:
@@ -104,6 +112,23 @@ def month_view():
                     "requester_name": schedule.instructor_name or "課程",
                 }
             )
+        for block in blocks:
+            if block.start_at.date() <= current_date <= block.end_at.date():
+                start_at = max(block.start_at, datetime.combine(current_date, datetime.min.time()))
+                end_at = min(block.end_at, datetime.combine(current_date, datetime.max.time()))
+                day_key = current_date.strftime("%Y-%m-%d")
+                daily_entries.setdefault(day_key, []).append(
+                    {
+                        "kind": "block",
+                        "start_at": start_at,
+                        "end_at": end_at,
+                        "title": block.title,
+                        "subtitle": f"{block.classroom.name} / {block.reason or '教室停用'} / {block.block_type}",
+                        "status": "pending_approval",
+                        "room_code": block.classroom.code,
+                        "requester_name": "停用時段",
+                    }
+                )
         current_date += timedelta(days=1)
 
     grouped_entries: OrderedDict[str, list[dict]] = OrderedDict()

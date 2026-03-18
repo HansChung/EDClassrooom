@@ -94,7 +94,7 @@
               <div class="week-slot">
                 <div class="week-slot-time">{{ item["start_at"].strftime("%H:%M") }} - {{ item["end_at"].strftime("%H:%M") }}</div>
                 <div class="week-slot-title">{{ item["title"] }}</div>
-                <div class="week-slot-room">{{ item["room_code"] }} / {{ item["requester_name"] }} / {{ '課表' if item["kind"] == 'schedule' else '借用' }}</div>
+                <div class="week-slot-room">{{ item["room_code"] }} / {{ item["requester_name"] }} / {{ '課表' if item["kind"] == 'schedule' else '停用' if item["kind"] == 'block' else '借用' }}</div>
               </div>
             {% else %}
               <div class="week-slot">
@@ -125,7 +125,7 @@
               <div class="schedule-meta">{{ item["subtitle"] }}</div>
             </div>
             <div class="d-flex justify-content-end">
-              <span class="status-badge status-{{ item["status"] }}">{{ '課表' if item["kind"] == 'schedule' else item["status"] }}</span>
+              <span class="status-badge status-{{ item["status"] }}">{{ '課表' if item["kind"] == 'schedule' else '停用' if item["kind"] == 'block' else item["status"] }}</span>
             </div>
           </article>
         {% endfor %}

@@ -164,7 +164,7 @@
             <strong>${slot.label}</strong>
             <span class="muted small">${slot.duration || ''}</span>
           </div>
-          ${slot.title ? `<div class="muted small mt-1">${slot.source === 'schedule' ? '課表' : slot.source === 'mixed' ? '借用 / 課表' : '借用'}：${slot.title}</div>` : ''}
+          ${slot.title ? `<div class="muted small mt-1">${slot.source === 'schedule' ? '課表' : slot.source === 'block' ? '停用' : slot.source === 'mixed' ? '借用 / 課表 / 停用' : '借用'}：${slot.title}</div>` : ''}
         </button>
       `).join('');
     }

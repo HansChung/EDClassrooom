@@ -84,6 +84,13 @@
         </div>
         <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100">儲存課表</button></div>
       </form>
+      <hr>
+      <h4 class="h6">CSV 匯入課表</h4>
+      <form method="post" action="{{ url_for('admin.import_schedules') }}" enctype="multipart/form-data" class="row g-2">
+        <div class="col-md-8"><input type="file" name="schedule_file" class="form-control" accept=".csv" required></div>
+        <div class="col-md-4 d-flex align-items-end"><button class="btn btn-outline-primary w-100">匯入 CSV</button></div>
+        <div class="col-12"><div class="muted small">CSV 欄位：classroom_code, course_name, instructor_name, weekday(0-6), start_time(HH:MM), end_time(HH:MM), semester_label, is_active(true/false)</div></div>
+      </form>
       <div class="table-shell table-responsive mt-3">
         <table class="table table-sm align-middle">
           <thead>
@@ -107,6 +114,67 @@
               </tr>
             {% else %}
               <tr><td colspan="8">目前沒有課表資料</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card card-body">
+      <h3 class="h6">教室維修 / 停用時段</h3>
+      <form method="post" action="{{ url_for('admin.upsert_block') }}" class="row g-2">
+        <div class="col-md-2">
+          <label class="form-label">教室</label>
+          <select name="classroom_id" class="form-select" required>
+            {% for room in rooms %}
+              <option value="{{ room.id }}">{{ room.code }} {{ room.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2"><label class="form-label">標題</label><input name="title" class="form-control" placeholder="例如：投影機維修" required></div>
+        <div class="col-md-2">
+          <label class="form-label">類型</label>
+          <select name="block_type" class="form-select">
+            <option value="maintenance">維修</option>
+            <option value="event">活動保留</option>
+            <option value="manual_block">手動停用</option>
+          </select>
+        </div>
+        <div class="col-md-3"><label class="form-label">開始</label><input type="datetime-local" name="start_at" class="form-control" required></div>
+        <div class="col-md-3"><label class="form-label">結束</label><input type="datetime-local" name="end_at" class="form-control" required></div>
+        <div class="col-md-9"><label class="form-label">原因</label><input name="reason" class="form-control" placeholder="例如：設備送修、校內活動"></div>
+        <div class="col-md-3 d-flex align-items-end">
+          <label class="form-check-label">
+            <input type="checkbox" name="is_active" class="form-check-input" checked>
+            啟用停用時段
+          </label>
+        </div>
+        <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100">儲存停用時段</button></div>
+      </form>
+      <div class="table-shell table-responsive mt-3">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr><th>教室</th><th>標題</th><th>類型</th><th>時間</th><th>原因</th><th>狀態</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            {% for item in blocks %}
+              <tr>
+                <td>{{ item.classroom.code }}</td>
+                <td>{{ item.title }}</td>
+                <td>{{ item.block_type }}</td>
+                <td>{{ item.start_at.strftime("%Y-%m-%d %H:%M") }} - {{ item.end_at.strftime("%Y-%m-%d %H:%M") }}</td>
+                <td>{{ item.reason or '-' }}</td>
+                <td><span class="status-badge status-{{ 'pending_approval' if item.is_active else 'cancelled' }}">{{ '啟用' if item.is_active else '停用' }}</span></td>
+                <td>
+                  <form method="post" action="{{ url_for('admin.delete_block', block_id=item.id) }}">
+                    <button class="btn btn-sm btn-outline-danger">刪除</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="7">目前沒有停用時段</td></tr>
             {% endfor %}
           </tbody>
         </table>
