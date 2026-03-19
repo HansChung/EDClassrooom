@@ -24,6 +24,25 @@ from app.modules.booking.services import (
 )
 
 
+
+
+def _normalize_location(value: str | None) -> str | None:
+    value = (value or '').strip()
+    if not value:
+        return None
+    aliases = {
+        '文館': '文學館',
+        '文學館': '文學館',
+        '教育館': '教育館',
+    }
+    return aliases.get(value, value)
+
+
+def _location_matches(room_location: str, selected_location: str | None) -> bool:
+    if not selected_location:
+        return True
+    return _normalize_location(room_location) == _normalize_location(selected_location)
+
 def _parse_local_datetime(value: str) -> datetime:
     return datetime.strptime(value, "%Y-%m-%dT%H:%M")
 
@@ -84,10 +103,11 @@ def _build_new_booking_context(
         .order_by(Classroom.location.asc(), Classroom.code.asc())
         .all()
     )
-    available_locations = sorted({room.location for room in rooms})
+    available_locations = sorted({_normalize_location(room.location) or room.location for room in rooms})
     available_room_types = sorted({room.room_type for room in rooms})
     if target_date is None:
         target_date = datetime.now().date()
+    selected_location = _normalize_location(selected_location)
     if selected_location not in available_locations and available_locations:
         selected_location = available_locations[0]
     keyword = (keyword or "").strip()
@@ -95,7 +115,7 @@ def _build_new_booking_context(
 
     filtered_rooms = []
     for room in rooms:
-        if selected_location and room.location != selected_location:
+        if not _location_matches(room.location, selected_location):
             continue
         if selected_room_types and room.room_type not in selected_room_types:
             continue
@@ -174,7 +194,7 @@ def _build_new_booking_context(
 
 def _parse_booking_filters() -> tuple[date, str | None, set[str], int | None, int | None, str]:
     target_date_raw = (request.values.get("target_date") or "").strip()
-    selected_location = (request.values.get("location") or "").strip() or None
+    selected_location = _normalize_location((request.values.get("location") or "").strip() or None)
     selected_room_types = {value.strip() for value in request.values.getlist("room_type") if value.strip()}
     min_capacity = request.values.get("min_capacity", type=int)
     max_capacity = request.values.get("max_capacity", type=int)

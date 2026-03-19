@@ -271,7 +271,7 @@ def upsert_classroom():
         db.session.add(room)
 
     room.name = request.form["name"].strip()
-    room.location = request.form["location"].strip()
+    room.location = "文學館" if request.form["location"].strip() == "文館" else request.form["location"].strip()
     room.room_type = request.form.get("room_type", "").strip() or "教室"
     room.capacity = int(request.form["capacity"])
     room.is_online_bookable = request.form.get("is_online_bookable") == "on"
