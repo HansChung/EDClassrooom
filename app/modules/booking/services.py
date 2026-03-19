@@ -1,12 +1,30 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 
 from sqlalchemy import and_, func
 
 from app.extensions import db
 from app.models import AuditLog, BookingRequest, Classroom, ClassroomBlock, CourseSchedule, SystemRule, User
+
+
+PERIOD_SLOTS = [
+    ("01", time(hour=8, minute=10), time(hour=9, minute=0)),
+    ("02", time(hour=9, minute=10), time(hour=10, minute=0)),
+    ("03", time(hour=10, minute=10), time(hour=11, minute=0)),
+    ("04", time(hour=11, minute=10), time(hour=12, minute=0)),
+    ("05", time(hour=12, minute=10), time(hour=13, minute=0)),
+    ("06", time(hour=13, minute=10), time(hour=14, minute=0)),
+    ("07", time(hour=14, minute=10), time(hour=15, minute=0)),
+    ("08", time(hour=15, minute=10), time(hour=16, minute=0)),
+    ("09", time(hour=16, minute=10), time(hour=17, minute=0)),
+    ("10", time(hour=17, minute=10), time(hour=18, minute=0)),
+    ("11", time(hour=18, minute=20), time(hour=19, minute=10)),
+    ("12", time(hour=19, minute=20), time(hour=20, minute=10)),
+    ("13", time(hour=20, minute=20), time(hour=21, minute=10)),
+    ("14", time(hour=21, minute=20), time(hour=22, minute=10)),
+]
 
 
 @dataclass
@@ -32,6 +50,7 @@ class BookingWindow:
 
 @dataclass
 class RoomGridCell:
+    period_code: str
     start_at: datetime
     end_at: datetime
     status: str
@@ -215,9 +234,19 @@ def list_room_grid_cells(*, classroom: Classroom, target_date: date) -> list[Roo
     block_slots = [(slot.start_at, slot.end_at, "block", slot.label) for slot in blocks]
     occupied_slots = block_slots + schedule_slots + booking_slots
 
-    cursor = day_start
-    while cursor < day_end:
-        slot_end = min(cursor + timedelta(hours=1), day_end)
+    for period_code, start_time, end_time in PERIOD_SLOTS:
+        cursor = datetime.combine(target_date, start_time)
+        slot_end = datetime.combine(target_date, end_time)
+        if cursor < day_start or slot_end > day_end:
+            slots.append(
+                RoomGridCell(
+                    period_code=period_code,
+                    start_at=cursor,
+                    end_at=slot_end,
+                    status="outside",
+                )
+            )
+            continue
         status = "available"
         label = ""
         title = ""
@@ -232,8 +261,16 @@ def list_room_grid_cells(*, classroom: Classroom, target_date: date) -> list[Roo
                 }[occupied_status]
                 title = occupied_label
                 break
-        slots.append(RoomGridCell(start_at=cursor, end_at=slot_end, status=status, label=label, title=title))
-        cursor = slot_end
+        slots.append(
+            RoomGridCell(
+                period_code=period_code,
+                start_at=cursor,
+                end_at=slot_end,
+                status=status,
+                label=label,
+                title=title,
+            )
+        )
 
     return slots
 

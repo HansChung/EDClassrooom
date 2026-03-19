@@ -72,6 +72,7 @@ class Classroom(db.Model):
     code: Mapped[str] = mapped_column(db.String(20), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(db.String(120), nullable=False)
     location: Mapped[str] = mapped_column(db.String(80), nullable=False)
+    room_type: Mapped[str] = mapped_column(db.String(40), nullable=False, default="教室")
     capacity: Mapped[int] = mapped_column(nullable=False)
     is_online_bookable: Mapped[bool] = mapped_column(default=True, nullable=False)
     booking_start_time: Mapped[time] = mapped_column(nullable=False, default=time(hour=8))

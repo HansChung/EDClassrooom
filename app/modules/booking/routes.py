@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -10,6 +10,7 @@ from app.models import BookingRequest, Classroom
 from app.modules.booking import bp
 from app.modules.notifications.services import create_notification, create_notifications_for_roles
 from app.modules.booking.services import (
+    PERIOD_SLOTS,
     cancel_booking,
     create_booking,
     get_classroom_booking_window,
@@ -37,7 +38,15 @@ def _format_slot_duration(slot_start: datetime, slot_end: datetime) -> str:
     return f"{minutes}m"
 
 
-def _build_new_booking_context(*, target_date: date | None = None, selected_location: str | None = None) -> dict:
+def _build_new_booking_context(
+    *,
+    target_date: date | None = None,
+    selected_location: str | None = None,
+    selected_room_types: set[str] | None = None,
+    min_capacity: int | None = None,
+    max_capacity: int | None = None,
+    keyword: str | None = None,
+) -> dict:
     rooms = (
         db.session.query(Classroom)
         .filter(Classroom.is_active.is_(True), Classroom.is_online_bookable.is_(True))
@@ -45,55 +54,49 @@ def _build_new_booking_context(*, target_date: date | None = None, selected_loca
         .all()
     )
     available_locations = sorted({room.location for room in rooms})
+    available_room_types = sorted({room.room_type for room in rooms})
     if target_date is None:
         target_date = datetime.now().date()
     if selected_location not in available_locations and available_locations:
         selected_location = available_locations[0]
-    filtered_rooms = [room for room in rooms if not selected_location or room.location == selected_location]
+    keyword = (keyword or "").strip()
+    selected_room_types = selected_room_types or set()
 
-    time_headers: list[dict[str, str]] = []
-    if filtered_rooms:
-        min_start = min(get_classroom_booking_window(room).start_time for room in filtered_rooms)
-        max_end = max(get_classroom_booking_window(room).end_time for room in filtered_rooms)
-        cursor = datetime.combine(target_date, min_start)
-        day_end = datetime.combine(target_date, max_end)
-        while cursor < day_end:
-            slot_end = min(cursor + timedelta(hours=1), day_end)
-            time_headers.append(
-                {
-                    "key": cursor.strftime("%H:%M"),
-                    "label": f"{cursor:%H:%M}",
-                    "end_label": f"{slot_end:%H:%M}",
-                }
-            )
-            cursor = slot_end
+    filtered_rooms = []
+    for room in rooms:
+        if selected_location and room.location != selected_location:
+            continue
+        if selected_room_types and room.room_type not in selected_room_types:
+            continue
+        if min_capacity is not None and room.capacity < min_capacity:
+            continue
+        if max_capacity is not None and room.capacity > max_capacity:
+            continue
+        if keyword and keyword.lower() not in f"{room.code} {room.name} {room.location} {room.room_type}".lower():
+            continue
+        filtered_rooms.append(room)
+
+    time_headers = [
+        {
+            "key": period_code,
+            "label": period_code,
+            "start_label": f"{start_time:%H:%M}",
+            "end_label": f"{end_time:%H:%M}",
+        }
+        for period_code, start_time, end_time in PERIOD_SLOTS
+    ]
 
     room_rows = []
     for room in filtered_rooms:
         window = get_classroom_booking_window(room)
         grid_cells = list_room_grid_cells(classroom=room, target_date=target_date)
-        cell_map = {cell.start_at.strftime("%H:%M"): cell for cell in grid_cells}
-        aligned_cells = []
-        for header in time_headers:
-            cell = cell_map.get(header["key"])
-            if cell is None:
-                header_start = datetime.combine(target_date, datetime.strptime(header["key"], "%H:%M").time())
-                header_end = min(header_start + timedelta(hours=1), datetime.combine(target_date, max_end))
-                aligned_cells.append(
-                    {
-                        "start_at": header_start,
-                        "end_at": header_end,
-                        "status": "outside",
-                        "label": "",
-                        "title": "",
-                    }
-                )
-            else:
-                aligned_cells.append(cell)
+        cell_map = {cell.period_code: cell for cell in grid_cells}
+        aligned_cells = [cell_map[header["key"]] for header in time_headers]
         room_rows.append(
             {
                 "room": room,
                 "window": f"{window.start_time:%H:%M}-{window.end_time:%H:%M}",
+                "room_type": room.room_type,
                 "cells": aligned_cells,
             }
         )
@@ -101,7 +104,12 @@ def _build_new_booking_context(*, target_date: date | None = None, selected_loca
     return {
         "rooms": rooms,
         "available_locations": available_locations,
+        "available_room_types": available_room_types,
         "selected_location": selected_location,
+        "selected_room_types": selected_room_types,
+        "min_capacity": min_capacity if min_capacity is not None else "",
+        "max_capacity": max_capacity if max_capacity is not None else "",
+        "keyword": keyword,
         "target_date": target_date.isoformat(),
         "time_headers": time_headers,
         "room_rows": room_rows,
@@ -121,12 +129,23 @@ def list_bookings():
 def new_booking():
     target_date_raw = (request.values.get("target_date") or "").strip()
     selected_location = (request.values.get("location") or "").strip() or None
+    selected_room_types = {value.strip() for value in request.values.getlist("room_type") if value.strip()}
+    min_capacity = request.values.get("min_capacity", type=int)
+    max_capacity = request.values.get("max_capacity", type=int)
+    keyword = (request.values.get("keyword") or "").strip()
     try:
         target_date = datetime.strptime(target_date_raw, "%Y-%m-%d").date() if target_date_raw else datetime.now().date()
     except ValueError:
         target_date = datetime.now().date()
 
-    context = _build_new_booking_context(target_date=target_date, selected_location=selected_location)
+    context = _build_new_booking_context(
+        target_date=target_date,
+        selected_location=selected_location,
+        selected_room_types=selected_room_types,
+        min_capacity=min_capacity,
+        max_capacity=max_capacity,
+        keyword=keyword,
+    )
     rooms = context["rooms"]
     if request.method == "POST":
         classroom = db.session.get(Classroom, int(request.form["classroom_id"]))

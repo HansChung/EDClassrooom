@@ -20,52 +20,82 @@
 </div>
 
 <div class="phone-sheet p-4 mb-4">
-  <form method="get" class="row g-3 align-items-end">
-    <div class="col-md-4">
-      <label class="form-label">借用日期</label>
-      <input type="date" name="target_date" class="form-control" value="{{ target_date }}" required>
+  <form method="get" class="row g-4">
+    <div class="col-xl-3">
+      <div class="booking-filter-panel">
+        <h3 class="h6 mb-3">篩選條件</h3>
+        <div class="mb-3">
+          <label class="form-label">借用日期</label>
+          <input type="date" name="target_date" class="form-control" value="{{ target_date }}" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">大樓</label>
+          <select name="location" class="form-select">
+            {% for location in available_locations %}
+              <option value="{{ location }}" {% if location == selected_location %}selected{% endif %}>{{ location }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">關鍵字</label>
+          <input type="text" name="keyword" class="form-control" value="{{ keyword }}" placeholder="教室代碼或名稱">
+        </div>
+        <div class="mb-3">
+          <div class="form-label mb-2">空間型態</div>
+          <div class="booking-checkbox-list">
+            {% for room_type in available_room_types %}
+              <label class="booking-check">
+                <input type="checkbox" name="room_type" value="{{ room_type }}" {% if room_type in selected_room_types %}checked{% endif %}>
+                <span>{{ room_type }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">最小人數</label>
+            <input type="number" name="min_capacity" class="form-control" value="{{ min_capacity }}" min="1">
+          </div>
+          <div class="col-6">
+            <label class="form-label">最大人數</label>
+            <input type="number" name="max_capacity" class="form-control" value="{{ max_capacity }}" min="1">
+          </div>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-primary w-100">搜尋空檔</button>
+        </div>
+      </div>
     </div>
-    <div class="col-md-4">
-      <label class="form-label">大樓</label>
-      <select name="location" class="form-select">
-        {% for location in available_locations %}
-          <option value="{{ location }}" {% if location == selected_location %}selected{% endif %}>{{ location }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-4">
-      <button class="btn btn-primary w-100">搜尋空檔</button>
-    </div>
-  </form>
-</div>
 
-<div class="phone-sheet p-4 mb-4">
-  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <div>
-      <h3 class="h5 mb-1">當日空檔總覽</h3>
-      <div class="muted small">空白格代表可借用，點一下即可帶入下方申請表。</div>
-    </div>
-    <div class="pill-list">
-      <span class="pill-item">空白：可借用</span>
-      <span class="pill-item">借：已核准</span>
-      <span class="pill-item">申：待審核</span>
-      <span class="pill-item">課：課表</span>
-      <span class="pill-item">停：停用</span>
-    </div>
-  </div>
+    <div class="col-xl-9">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+          <h3 class="h5 mb-1">當日空檔總覽</h3>
+          <div class="muted small">依節次查看各教室狀態，空白格可直接點選借用。</div>
+        </div>
+        <div class="pill-list">
+          <span class="pill-item">空白：可借用</span>
+          <span class="pill-item">借：已核准</span>
+          <span class="pill-item">申：待審核</span>
+          <span class="pill-item">課：課表</span>
+          <span class="pill-item">停：停用</span>
+        </div>
+      </div>
 
-  <div class="booking-grid-shell">
-    <div class="booking-grid-table">
-      <table class="table booking-grid-table-inner align-middle">
+      <div class="booking-grid-shell">
+        <div class="booking-grid-table">
+          <table class="table booking-grid-table-inner align-middle">
         <thead>
           <tr>
             <th>教室</th>
             <th>館舍</th>
+            <th>型態</th>
             <th>容量</th>
             <th>開放時段</th>
             {% for header in time_headers %}
               <th class="text-center">
                 <div>{{ header.label }}</div>
+                <div class="muted small">{{ header.start_label }}</div>
                 <div class="muted small">{{ header.end_label }}</div>
               </th>
             {% endfor %}
@@ -76,6 +106,7 @@
             <tr>
               <td><strong>{{ row.room.code }}</strong><div class="muted small">{{ row.room.name }}</div></td>
               <td>{{ row.room.location }}</td>
+              <td>{{ row.room_type }}</td>
               <td>{{ row.room.capacity }}</td>
               <td>{{ row.window }}</td>
               {% for cell in row.cells %}
@@ -97,13 +128,15 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="{{ 4 + time_headers|length }}">目前沒有可顯示的教室。</td>
+              <td colspan="{{ 5 + time_headers|length }}">目前沒有符合條件的教室。</td>
             </tr>
           {% endfor %}
         </tbody>
-      </table>
+          </table>
+        </div>
+      </div>
     </div>
-  </div>
+  </form>
 </div>
 
 <div class="phone-sheet p-4">
@@ -117,6 +150,12 @@
   <form method="post" class="row g-3">
     <input type="hidden" name="target_date" value="{{ target_date }}">
     <input type="hidden" name="location" value="{{ selected_location }}">
+    <input type="hidden" name="keyword" value="{{ keyword }}">
+    <input type="hidden" name="min_capacity" value="{{ min_capacity }}">
+    <input type="hidden" name="max_capacity" value="{{ max_capacity }}">
+    {% for room_type in selected_room_types %}
+      <input type="hidden" name="room_type" value="{{ room_type }}">
+    {% endfor %}
     <div class="col-md-6">
       <label class="form-label">教室</label>
       <select id="classroom-select" name="classroom_id" class="form-select" required>

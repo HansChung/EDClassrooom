@@ -23,16 +23,16 @@ DEFAULT_RULES = [
 ]
 
 DEFAULT_CLASSROOMS = [
-    ("L105", "多媒體討論教室", "文館", 65, True, None, time(hour=9), time(hour=18)),
-    ("L108", "數位錄音室 B", "文館", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
-    ("L109", "數位錄音室 A", "文館", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
-    ("L111", "影棚", "文館", 10, True, None, time(hour=9), time(hour=18)),
-    ("L102", "電腦教室", "文館", 65, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
-    ("L110", "電腦教室", "文館", 70, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
-    ("L103", "蘋果電腦教室", "文館", 32, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
-    ("ED202", "專題製作企劃室", "教育館", 15, True, None, time(hour=8), time(hour=17)),
-    ("ED204", "研究生教室", "教育館", 20, True, None, time(hour=8), time(hour=17)),
-    ("ED205", "多功能研討室", "教育館", 8, True, None, time(hour=8), time(hour=17)),
+    ("L105", "多媒體討論教室", "文館", "教室", 65, True, None, time(hour=9), time(hour=18)),
+    ("L108", "數位錄音室 B", "文館", "錄音室", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
+    ("L109", "數位錄音室 A", "文館", "錄音室", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
+    ("L111", "影棚", "文館", "影棚", 10, True, None, time(hour=9), time(hour=18)),
+    ("L102", "電腦教室", "文館", "電腦教室", 65, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
+    ("L110", "電腦教室", "文館", "電腦教室", 70, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
+    ("L103", "蘋果電腦教室", "文館", "電腦教室", 32, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
+    ("ED202", "專題製作企劃室", "教育館", "教室", 15, True, None, time(hour=8), time(hour=17)),
+    ("ED204", "研究生教室", "教育館", "教室", 20, True, None, time(hour=8), time(hour=17)),
+    ("ED205", "多功能研討室", "教育館", "會議室", 8, True, None, time(hour=8), time(hour=17)),
 ]
 
 
@@ -52,6 +52,8 @@ def _ensure_classroom_time_window_columns() -> None:
         statements.append("ALTER TABLE classrooms ADD COLUMN booking_start_time TIME NOT NULL DEFAULT '08:00:00'")
     if "booking_end_time" not in columns:
         statements.append("ALTER TABLE classrooms ADD COLUMN booking_end_time TIME NOT NULL DEFAULT '22:00:00'")
+    if "room_type" not in columns:
+        statements.append("ALTER TABLE classrooms ADD COLUMN room_type VARCHAR(40) NOT NULL DEFAULT '教室'")
 
     for statement in statements:
         db.session.execute(text(statement))
@@ -72,7 +74,7 @@ def seed_default_data() -> None:
     old_default_start = time(hour=8)
     old_default_end = time(hour=22)
 
-    for code, name, location, capacity, is_online_bookable, note, booking_start_time, booking_end_time in DEFAULT_CLASSROOMS:
+    for code, name, location, room_type, capacity, is_online_bookable, note, booking_start_time, booking_end_time in DEFAULT_CLASSROOMS:
         room = db.session.query(Classroom).filter_by(code=code).first()
         if room is None:
             db.session.add(
@@ -80,6 +82,7 @@ def seed_default_data() -> None:
                     code=code,
                     name=name,
                     location=location,
+                    room_type=room_type,
                     capacity=capacity,
                     is_online_bookable=is_online_bookable,
                     booking_start_time=booking_start_time,
@@ -92,6 +95,8 @@ def seed_default_data() -> None:
         if room.booking_start_time == old_default_start and room.booking_end_time == old_default_end:
             room.booking_start_time = booking_start_time
             room.booking_end_time = booking_end_time
+        if not room.room_type or room.room_type == "教室":
+            room.room_type = room_type
     db.session.commit()
 
 

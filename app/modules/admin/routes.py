@@ -262,6 +262,7 @@ def upsert_classroom():
 
     room.name = request.form["name"].strip()
     room.location = request.form["location"].strip()
+    room.room_type = request.form.get("room_type", "").strip() or "教室"
     room.capacity = int(request.form["capacity"])
     room.is_online_bookable = request.form.get("is_online_bookable") == "on"
     booking_start_time = datetime.strptime(request.form["booking_start_time"], "%H:%M").time()
