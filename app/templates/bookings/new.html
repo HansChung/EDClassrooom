@@ -81,10 +81,20 @@
           <span class="pill-item">停：停用</span>
         </div>
       </div>
+      <ul class="nav nav-pills booking-view-tabs mb-3" id="bookingViewTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#booking-grid-tab" type="button" role="tab">表格</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" data-bs-toggle="pill" data-bs-target="#booking-detail-tab" type="button" role="tab">已借用明細</button>
+        </li>
+      </ul>
 
-      <div class="booking-grid-shell">
-        <div class="booking-grid-table">
-          <table class="table booking-grid-table-inner align-middle">
+      <div class="tab-content">
+        <div class="tab-pane fade show active" id="booking-grid-tab" role="tabpanel">
+          <div class="booking-grid-shell">
+            <div class="booking-grid-table">
+              <table class="table booking-grid-table-inner align-middle">
         <thead>
           <tr>
             <th>教室</th>
@@ -132,22 +142,50 @@
             </tr>
           {% endfor %}
         </tbody>
-          </table>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="tab-pane fade" id="booking-detail-tab" role="tabpanel">
+          <div class="table-shell table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr><th>教室</th><th>型態</th><th>節次</th><th>時間</th><th>狀態</th><th>說明</th></tr>
+              </thead>
+              <tbody>
+                {% for item in detail_rows %}
+                  <tr>
+                    <td>{{ item.room_code }} {{ item.room_name }}</td>
+                    <td>{{ item.room_type }}</td>
+                    <td>{{ item.period_code }}</td>
+                    <td>{{ item.time_range }}</td>
+                    <td>{{ item.status }}</td>
+                    <td>{{ item.title }}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="6">此日期目前沒有已占用明細。</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
   </form>
 </div>
 
-<div class="phone-sheet p-4">
-  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <div>
-      <h3 class="h5 mb-1">送出借用申請</h3>
-      <div id="selected-slot-summary" class="muted small">請先從上方空檔矩陣選擇一個時段。</div>
-    </div>
-  </div>
-
-  <form method="post" class="row g-3">
+<div class="modal fade" id="bookingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content booking-modal-content">
+      <div class="modal-header border-0">
+        <div>
+          <h3 class="h5 mb-1">送出借用申請</h3>
+          <div id="selected-slot-summary" class="muted small">請先從上方空檔矩陣選擇一個時段。</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+  <form method="post" class="row g-3" id="booking-modal-form">
     <input type="hidden" name="target_date" value="{{ target_date }}">
     <input type="hidden" name="location" value="{{ selected_location }}">
     <input type="hidden" name="keyword" value="{{ keyword }}">
@@ -188,6 +226,9 @@
       <button class="btn btn-primary">送出申請</button>
     </div>
   </form>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -196,6 +237,8 @@
     const startAtInput = document.querySelector('#start-at');
     const endAtInput = document.querySelector('#end-at');
     const summary = document.querySelector('#selected-slot-summary');
+    const bookingModalElement = document.querySelector('#bookingModal');
+    const bookingModal = new bootstrap.Modal(bookingModalElement);
 
     function toLocalInputValue(value) {
       return value.slice(0, 16);
@@ -211,7 +254,7 @@
       startAtInput.value = toLocalInputValue(button.dataset.start);
       endAtInput.value = toLocalInputValue(button.dataset.end);
       summary.textContent = `${button.dataset.roomLabel} / ${button.dataset.start.slice(11, 16)} - ${button.dataset.end.slice(11, 16)}`;
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      bookingModal.show();
     });
   })();
 </script>

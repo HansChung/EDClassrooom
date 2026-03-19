@@ -17,7 +17,7 @@ from odf.text import P
 from openpyxl import Workbook, load_workbook
 
 from app.extensions import db
-from app.models import BookingRequest, Classroom, ClassroomBlock, CourseSchedule, Role, SystemRule, User
+from app.models import BookingPeriod, BookingRequest, Classroom, ClassroomBlock, CourseSchedule, Role, SystemRule, User
 from app.modules.admin import bp
 from app.modules.booking.services import create_booking
 from app.modules.notifications.services import create_notification
@@ -52,12 +52,22 @@ def _get_dashboard_context() -> dict:
         .order_by(ClassroomBlock.start_at.asc(), Classroom.code.asc())
         .all()
     )
+    periods = (
+        db.session.query(BookingPeriod)
+        .order_by(BookingPeriod.sort_order.asc(), BookingPeriod.code.asc())
+        .all()
+    )
     return {
         "rooms": rooms,
         "rules": rules,
         "users": users,
         "schedules": schedules,
         "blocks": blocks,
+        "booking_periods": periods,
+        "booking_periods_text": "\n".join(
+            f"{period.code},{period.start_time:%H:%M},{period.end_time:%H:%M}"
+            for period in periods
+        ),
     }
 
 
@@ -295,6 +305,66 @@ def upsert_rule():
         rule.description = description
     db.session.commit()
     flash("規則已更新。", "success")
+    return redirect(url_for("admin.dashboard"))
+
+
+@bp.route("/periods", methods=["POST"])
+@login_required
+@roles_required("super_admin", "staff_manager")
+def replace_periods():
+    raw_text = request.form.get("periods_text", "").strip()
+    if not raw_text:
+        flash("請提供至少一筆節次設定。", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    parsed_periods: list[BookingPeriod] = []
+    seen_codes: set[str] = set()
+    previous_end_time = None
+    for line_number, line in enumerate(raw_text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = [part.strip() for part in stripped.split(",")]
+        if len(parts) != 3:
+            flash(f"第 {line_number} 行格式錯誤，請使用 01,08:10,09:00。", "danger")
+            return redirect(url_for("admin.dashboard"))
+
+        code, start_raw, end_raw = parts
+        if code in seen_codes:
+            flash(f"第 {line_number} 行節次代碼重複：{code}。", "danger")
+            return redirect(url_for("admin.dashboard"))
+        seen_codes.add(code)
+
+        try:
+            start_time = datetime.strptime(start_raw, "%H:%M").time()
+            end_time = datetime.strptime(end_raw, "%H:%M").time()
+        except ValueError:
+            flash(f"第 {line_number} 行時間格式錯誤，請使用 HH:MM。", "danger")
+            return redirect(url_for("admin.dashboard"))
+
+        if start_time >= end_time:
+            flash(f"第 {line_number} 行結束時間需晚於開始時間。", "danger")
+            return redirect(url_for("admin.dashboard"))
+        if previous_end_time and start_time <= previous_end_time:
+            flash(f"第 {line_number} 行開始時間需晚於上一節次結束時間。", "danger")
+            return redirect(url_for("admin.dashboard"))
+        previous_end_time = end_time
+
+        parsed_periods.append(
+            BookingPeriod(
+                code=code,
+                start_time=start_time,
+                end_time=end_time,
+                sort_order=line_number,
+                is_active=True,
+            )
+        )
+
+    db.session.query(BookingPeriod).delete()
+    for period in parsed_periods:
+        db.session.add(period)
+    db.session.commit()
+    flash("節次設定已更新。", "success")
     return redirect(url_for("admin.dashboard"))
 
 

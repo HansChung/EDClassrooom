@@ -6,10 +6,19 @@ from datetime import date, datetime, time
 from sqlalchemy import and_, func
 
 from app.extensions import db
-from app.models import AuditLog, BookingRequest, Classroom, ClassroomBlock, CourseSchedule, SystemRule, User
+from app.models import (
+    AuditLog,
+    BookingPeriod,
+    BookingRequest,
+    Classroom,
+    ClassroomBlock,
+    CourseSchedule,
+    SystemRule,
+    User,
+)
 
 
-PERIOD_SLOTS = [
+DEFAULT_PERIOD_SLOTS = [
     ("01", time(hour=8, minute=10), time(hour=9, minute=0)),
     ("02", time(hour=9, minute=10), time(hour=10, minute=0)),
     ("03", time(hour=10, minute=10), time(hour=11, minute=0)),
@@ -56,6 +65,18 @@ class RoomGridCell:
     status: str
     label: str = ""
     title: str = ""
+
+
+def get_booking_periods() -> list[tuple[str, time, time]]:
+    periods = (
+        db.session.query(BookingPeriod)
+        .filter(BookingPeriod.is_active.is_(True))
+        .order_by(BookingPeriod.sort_order.asc(), BookingPeriod.code.asc())
+        .all()
+    )
+    if periods:
+        return [(period.code, period.start_time, period.end_time) for period in periods]
+    return DEFAULT_PERIOD_SLOTS
 
 
 def _get_room_bookings_for_window(
@@ -234,7 +255,7 @@ def list_room_grid_cells(*, classroom: Classroom, target_date: date) -> list[Roo
     block_slots = [(slot.start_at, slot.end_at, "block", slot.label) for slot in blocks]
     occupied_slots = block_slots + schedule_slots + booking_slots
 
-    for period_code, start_time, end_time in PERIOD_SLOTS:
+    for period_code, start_time, end_time in get_booking_periods():
         cursor = datetime.combine(target_date, start_time)
         slot_end = datetime.combine(target_date, end_time)
         if cursor < day_start or slot_end > day_end:

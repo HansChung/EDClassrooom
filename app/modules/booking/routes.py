@@ -10,9 +10,9 @@ from app.models import BookingRequest, Classroom
 from app.modules.booking import bp
 from app.modules.notifications.services import create_notification, create_notifications_for_roles
 from app.modules.booking.services import (
-    PERIOD_SLOTS,
     cancel_booking,
     create_booking,
+    get_booking_periods,
     get_classroom_booking_window,
     list_room_grid_cells,
     list_room_availability,
@@ -36,6 +36,15 @@ def _format_slot_duration(slot_start: datetime, slot_end: datetime) -> str:
     if hours:
         return f"{hours}h"
     return f"{minutes}m"
+
+
+def _status_label(status: str) -> str:
+    return {
+        "booked": "已核准",
+        "pending": "待審核",
+        "schedule": "課表",
+        "block": "停用",
+    }.get(status, status)
 
 
 def _build_new_booking_context(
@@ -76,6 +85,7 @@ def _build_new_booking_context(
             continue
         filtered_rooms.append(room)
 
+    periods = get_booking_periods()
     time_headers = [
         {
             "key": period_code,
@@ -83,10 +93,11 @@ def _build_new_booking_context(
             "start_label": f"{start_time:%H:%M}",
             "end_label": f"{end_time:%H:%M}",
         }
-        for period_code, start_time, end_time in PERIOD_SLOTS
+        for period_code, start_time, end_time in periods
     ]
 
     room_rows = []
+    detail_rows = []
     for room in filtered_rooms:
         window = get_classroom_booking_window(room)
         grid_cells = list_room_grid_cells(classroom=room, target_date=target_date)
@@ -100,6 +111,25 @@ def _build_new_booking_context(
                 "cells": aligned_cells,
             }
         )
+        for cell in aligned_cells:
+            if cell.status in {"available", "outside"}:
+                continue
+            detail_rows.append(
+                {
+                    "room_code": room.code,
+                    "room_name": room.name,
+                    "room_type": room.room_type,
+                    "period_code": cell.period_code,
+                    "time_range": f"{cell.start_at:%H:%M}-{cell.end_at:%H:%M}",
+                    "status": _status_label(cell.status),
+                    "title": cell.title or "-",
+                }
+            )
+
+    period_text = "\n".join(
+        f"{period_code},{start_time:%H:%M},{end_time:%H:%M}"
+        for period_code, start_time, end_time in periods
+    )
 
     return {
         "rooms": rooms,
@@ -113,6 +143,8 @@ def _build_new_booking_context(
         "target_date": target_date.isoformat(),
         "time_headers": time_headers,
         "room_rows": room_rows,
+        "detail_rows": detail_rows,
+        "booking_periods_text": period_text,
     }
 
 

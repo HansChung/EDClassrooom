@@ -6,7 +6,7 @@ from flask import Flask
 from sqlalchemy import text
 
 from app.extensions import db
-from app.models import Classroom, Role, SystemRule
+from app.models import BookingPeriod, Classroom, Role, SystemRule
 
 
 DEFAULT_ROLES = [
@@ -20,6 +20,23 @@ DEFAULT_RULES = [
     ("max_hours_per_booking", "2", "單次借用上限（小時）"),
     ("max_hours_per_day", "3", "每日借用總時數上限（小時）"),
     ("auto_approve_max_hours", "2", "自動核准時數上限（小時）"),
+]
+
+DEFAULT_BOOKING_PERIODS = [
+    ("01", time(hour=8, minute=10), time(hour=9, minute=0), 1),
+    ("02", time(hour=9, minute=10), time(hour=10, minute=0), 2),
+    ("03", time(hour=10, minute=10), time(hour=11, minute=0), 3),
+    ("04", time(hour=11, minute=10), time(hour=12, minute=0), 4),
+    ("05", time(hour=12, minute=10), time(hour=13, minute=0), 5),
+    ("06", time(hour=13, minute=10), time(hour=14, minute=0), 6),
+    ("07", time(hour=14, minute=10), time(hour=15, minute=0), 7),
+    ("08", time(hour=15, minute=10), time(hour=16, minute=0), 8),
+    ("09", time(hour=16, minute=10), time(hour=17, minute=0), 9),
+    ("10", time(hour=17, minute=10), time(hour=18, minute=0), 10),
+    ("11", time(hour=18, minute=20), time(hour=19, minute=10), 11),
+    ("12", time(hour=19, minute=20), time(hour=20, minute=10), 12),
+    ("13", time(hour=20, minute=20), time(hour=21, minute=10), 13),
+    ("14", time(hour=21, minute=20), time(hour=22, minute=10), 14),
 ]
 
 DEFAULT_CLASSROOMS = [
@@ -70,6 +87,18 @@ def seed_default_data() -> None:
     for key, value, desc in DEFAULT_RULES:
         if db.session.query(SystemRule).filter_by(key=key).first() is None:
             db.session.add(SystemRule(key=key, value=value, description=desc))
+
+    for code, start_time, end_time, sort_order in DEFAULT_BOOKING_PERIODS:
+        if db.session.query(BookingPeriod).filter_by(code=code).first() is None:
+            db.session.add(
+                BookingPeriod(
+                    code=code,
+                    start_time=start_time,
+                    end_time=end_time,
+                    sort_order=sort_order,
+                    is_active=True,
+                )
+            )
 
     old_default_start = time(hour=8)
     old_default_end = time(hour=22)

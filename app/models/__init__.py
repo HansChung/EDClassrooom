@@ -1,5 +1,6 @@
 from app.models.entities import (
     AuditLog,
+    BookingPeriod,
     BookingApproval,
     BookingRequest,
     Classroom,
@@ -17,6 +18,7 @@ __all__ = [
     "Role",
     "UserRole",
     "Classroom",
+    "BookingPeriod",
     "ClassroomBlock",
     "CourseSchedule",
     "BookingRequest",

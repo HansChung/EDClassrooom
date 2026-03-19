@@ -109,6 +109,17 @@ class CourseSchedule(db.Model):
     classroom: Mapped[Classroom] = relationship(back_populates="schedules")
 
 
+class BookingPeriod(db.Model):
+    __tablename__ = "booking_periods"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(db.String(10), nullable=False, unique=True, index=True)
+    start_time: Mapped[time] = mapped_column(nullable=False)
+    end_time: Mapped[time] = mapped_column(nullable=False)
+    sort_order: Mapped[int] = mapped_column(nullable=False, default=0, index=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+
+
 class ClassroomBlock(db.Model):
     __tablename__ = "classroom_blocks"
 

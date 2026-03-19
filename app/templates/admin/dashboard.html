@@ -60,6 +60,25 @@
     </div>
   </div>
 
+  <div class="col-lg-6">
+    <div class="card card-body">
+      <h3 class="h6">節次設定</h3>
+      <form method="post" action="{{ url_for('admin.replace_periods') }}" class="row g-2">
+        <div class="col-12">
+          <label class="form-label">每行格式：節次代碼,開始時間,結束時間</label>
+          <textarea name="periods_text" class="form-control" rows="8" required>{{ booking_periods_text }}</textarea>
+        </div>
+        <div class="col-12"><button class="btn btn-primary btn-sm">更新節次</button></div>
+      </form>
+      <hr>
+      <ul class="small mb-0">
+        {% for item in booking_periods %}
+          <li>{{ item.code }} / {{ item.start_time.strftime("%H:%M") }} - {{ item.end_time.strftime("%H:%M") }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
   <div class="col-12">
     <div class="card card-body">
       <h3 class="h6">課表管理</h3>
