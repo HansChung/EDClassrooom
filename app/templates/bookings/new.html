@@ -259,8 +259,65 @@
     const periodSummary = document.querySelector('#selected-period-summary');
     const durationSummary = document.querySelector('#selected-duration-summary');
     const bookingModalElement = document.querySelector('#bookingModal');
-    const bookingModal = new bootstrap.Modal(bookingModalElement);
     const detailFilterButtons = document.querySelectorAll('.detail-filter-btn');
+
+    function createModalController(element) {
+      if (window.bootstrap && window.bootstrap.Modal) {
+        const modal = new window.bootstrap.Modal(element);
+        return {
+          show() { modal.show(); },
+          hide() { modal.hide(); },
+        };
+      }
+
+      const backdropClass = 'modal-backdrop fade show';
+      let backdrop = null;
+
+      function ensureBackdrop() {
+        if (!backdrop) {
+          backdrop = document.createElement('div');
+          backdrop.className = backdropClass;
+          backdrop.addEventListener('click', () => controller.hide());
+        }
+        if (!document.body.contains(backdrop)) {
+          document.body.appendChild(backdrop);
+        }
+      }
+
+      const controller = {
+        show() {
+          ensureBackdrop();
+          element.style.display = 'block';
+          element.classList.add('show');
+          element.removeAttribute('aria-hidden');
+          element.setAttribute('aria-modal', 'true');
+          document.body.classList.add('modal-open');
+        },
+        hide() {
+          element.style.display = 'none';
+          element.classList.remove('show');
+          element.setAttribute('aria-hidden', 'true');
+          element.removeAttribute('aria-modal');
+          if (backdrop && document.body.contains(backdrop)) {
+            backdrop.remove();
+          }
+          document.body.classList.remove('modal-open');
+          element.dispatchEvent(new CustomEvent('hidden.bs.modal'));
+        },
+      };
+
+      element.querySelectorAll('[data-bs-dismiss="modal"]').forEach((button) => {
+        button.addEventListener('click', () => controller.hide());
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && element.classList.contains('show')) {
+          controller.hide();
+        }
+      });
+      return controller;
+    }
+
+    const bookingModal = createModalController(bookingModalElement);
     const detailRows = document.querySelectorAll('.detail-row');
     let selectedButtons = [];
 
