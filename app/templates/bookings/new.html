@@ -144,7 +144,8 @@
                       data-period-code="{{ cell.period_code }}"
                       data-start="{{ cell.start_at.isoformat() }}"
                       data-end="{{ cell.end_at.isoformat() }}"
-                    ></button>
+                      title="點擊借用 {{ cell.period_code }} / {{ cell.start_at.strftime('%H:%M') }} - {{ cell.end_at.strftime('%H:%M') }}"
+                    ><span>{{ cell.period_code }}</span><span>可借</span></button>
                   {% else %}
                     <div class="booking-grid-slot booking-grid-slot-{{ cell.status }}" title="{{ cell.title }}">{{ cell.label }}</div>
                   {% endif %}
@@ -343,12 +344,14 @@
       if (insertIndex === -1) {
         clearSelection();
         selectedButtons.push(button);
+        button.classList.add('booking-grid-slot-selected');
       } else if (insertIndex === 0) {
         selectedButtons.unshift(button);
+        button.classList.add('booking-grid-slot-selected');
       } else {
         selectedButtons.push(button);
+        button.classList.add('booking-grid-slot-selected');
       }
-      button.classList.add('booking-grid-slot-selected');
       const first = selectedButtons[0];
       const last = selectedButtons[selectedButtons.length - 1];
       const durationHours = (new Date(last.dataset.end) - new Date(first.dataset.start)) / 3600000;
