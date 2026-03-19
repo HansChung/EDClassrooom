@@ -40,13 +40,13 @@ DEFAULT_BOOKING_PERIODS = [
 ]
 
 DEFAULT_CLASSROOMS = [
-    ("L105", "多媒體討論教室", "文館", "教室", 65, True, None, time(hour=9), time(hour=18)),
-    ("L108", "數位錄音室 B", "文館", "錄音室", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
-    ("L109", "數位錄音室 A", "文館", "錄音室", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
-    ("L111", "影棚", "文館", "影棚", 10, True, None, time(hour=9), time(hour=18)),
-    ("L102", "電腦教室", "文館", "電腦教室", 65, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
-    ("L110", "電腦教室", "文館", "電腦教室", 70, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
-    ("L103", "蘋果電腦教室", "文館", "電腦教室", 32, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
+    ("L105", "多媒體討論教室", "文學館", "教室", 65, True, None, time(hour=9), time(hour=18)),
+    ("L108", "數位錄音室 B", "文學館", "錄音室", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
+    ("L109", "數位錄音室 A", "文學館", "錄音室", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
+    ("L111", "影棚", "文學館", "影棚", 10, True, None, time(hour=9), time(hour=18)),
+    ("L102", "電腦教室", "文學館", "電腦教室", 65, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
+    ("L110", "電腦教室", "文學館", "電腦教室", 70, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
+    ("L103", "蘋果電腦教室", "文學館", "電腦教室", 32, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
     ("ED202", "專題製作企劃室", "教育館", "教室", 15, True, None, time(hour=8), time(hour=17)),
     ("ED204", "研究生教室", "教育館", "教室", 20, True, None, time(hour=8), time(hour=17)),
     ("ED205", "多功能研討室", "教育館", "會議室", 8, True, None, time(hour=8), time(hour=17)),
@@ -126,6 +126,8 @@ def seed_default_data() -> None:
             room.booking_end_time = booking_end_time
         if not room.room_type or room.room_type == "教室":
             room.room_type = room_type
+        if room.location == "文館":
+            room.location = "文學館"
     db.session.commit()
 
 
