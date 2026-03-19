@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import click
+from datetime import time
 from flask import Flask
 from sqlalchemy import text
 
@@ -22,16 +23,16 @@ DEFAULT_RULES = [
 ]
 
 DEFAULT_CLASSROOMS = [
-    ("L105", "多媒體討論教室", "文館", 65, True, None),
-    ("L108", "數位錄音室 B", "文館", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。"),
-    ("L109", "數位錄音室 A", "文館", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。"),
-    ("L111", "影棚", "文館", 10, True, None),
-    ("L102", "電腦教室", "文館", 65, False, "請向工頭登記借用"),
-    ("L110", "電腦教室", "文館", 70, False, "請向工頭登記借用"),
-    ("L103", "蘋果電腦教室", "文館", 32, False, "請向工頭登記借用"),
-    ("ED202", "專題製作企劃室", "教育館", 15, True, None),
-    ("ED204", "研究生教室", "教育館", 20, True, None),
-    ("ED205", "多功能研討室", "教育館", 8, True, None),
+    ("L105", "多媒體討論教室", "文館", 65, True, None, time(hour=9), time(hour=18)),
+    ("L108", "數位錄音室 B", "文館", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
+    ("L109", "數位錄音室 A", "文館", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
+    ("L111", "影棚", "文館", 10, True, None, time(hour=9), time(hour=18)),
+    ("L102", "電腦教室", "文館", 65, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
+    ("L110", "電腦教室", "文館", 70, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
+    ("L103", "蘋果電腦教室", "文館", 32, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
+    ("ED202", "專題製作企劃室", "教育館", 15, True, None, time(hour=8), time(hour=17)),
+    ("ED204", "研究生教室", "教育館", 20, True, None, time(hour=8), time(hour=17)),
+    ("ED205", "多功能研討室", "教育館", 8, True, None, time(hour=8), time(hour=17)),
 ]
 
 
@@ -68,8 +69,12 @@ def seed_default_data() -> None:
         if db.session.query(SystemRule).filter_by(key=key).first() is None:
             db.session.add(SystemRule(key=key, value=value, description=desc))
 
-    for code, name, location, capacity, is_online_bookable, note in DEFAULT_CLASSROOMS:
-        if db.session.query(Classroom).filter_by(code=code).first() is None:
+    old_default_start = time(hour=8)
+    old_default_end = time(hour=22)
+
+    for code, name, location, capacity, is_online_bookable, note, booking_start_time, booking_end_time in DEFAULT_CLASSROOMS:
+        room = db.session.query(Classroom).filter_by(code=code).first()
+        if room is None:
             db.session.add(
                 Classroom(
                     code=code,
@@ -77,9 +82,16 @@ def seed_default_data() -> None:
                     location=location,
                     capacity=capacity,
                     is_online_bookable=is_online_bookable,
+                    booking_start_time=booking_start_time,
+                    booking_end_time=booking_end_time,
                     note=note,
                 )
             )
+            continue
+
+        if room.booking_start_time == old_default_start and room.booking_end_time == old_default_end:
+            room.booking_start_time = booking_start_time
+            room.booking_end_time = booking_end_time
     db.session.commit()
 
 
