@@ -24,6 +24,12 @@ class TimeSlot:
     label: str = ""
 
 
+@dataclass
+class BookingWindow:
+    start_time: time
+    end_time: time
+
+
 def _get_room_bookings_for_window(
     *,
     classroom_id: int,
@@ -39,6 +45,13 @@ def _get_room_bookings_for_window(
         )
         .order_by(BookingRequest.start_at.asc())
         .all()
+    )
+
+
+def get_classroom_booking_window(classroom: Classroom) -> BookingWindow:
+    return BookingWindow(
+        start_time=classroom.booking_start_time or time(hour=8),
+        end_time=classroom.booking_end_time or time(hour=22),
     )
 
 
@@ -64,24 +77,30 @@ def _get_room_schedule_slots(*, classroom_id: int, target_date: date) -> list[Ti
     ]
 
 
-def _get_room_block_slots(*, classroom_id: int, target_date: date) -> list[TimeSlot]:
-    day_start = datetime.combine(target_date, time.min)
-    day_end = datetime.combine(target_date, time.max)
+def _get_room_block_slots(
+    *,
+    classroom_id: int,
+    target_date: date,
+    day_start: datetime,
+    day_end: datetime,
+) -> list[TimeSlot]:
+    full_day_start = datetime.combine(target_date, time.min)
+    full_day_end = datetime.combine(target_date, time.max)
     blocks = (
         db.session.query(ClassroomBlock)
         .filter(
             ClassroomBlock.classroom_id == classroom_id,
             ClassroomBlock.is_active.is_(True),
-            ClassroomBlock.start_at < day_end,
-            ClassroomBlock.end_at > day_start,
+            ClassroomBlock.start_at < full_day_end,
+            ClassroomBlock.end_at > full_day_start,
         )
         .order_by(ClassroomBlock.start_at.asc())
         .all()
     )
     return [
         TimeSlot(
-            start_at=max(item.start_at, datetime.combine(target_date, time(hour=8))),
-            end_at=min(item.end_at, datetime.combine(target_date, time(hour=22))),
+            start_at=max(item.start_at, day_start),
+            end_at=min(item.end_at, day_end),
             source="block",
             label=item.title,
         )
@@ -105,11 +124,12 @@ def _merge_occupied_slots(slots: list[TimeSlot]) -> list[TimeSlot]:
     return merged
 
 
-def list_room_availability(*, classroom_id: int, target_date: date) -> tuple[list[TimeSlot], list[TimeSlot]]:
-    day_start = datetime.combine(target_date, time(hour=8))
-    day_end = datetime.combine(target_date, time(hour=22))
+def list_room_availability(*, classroom: Classroom, target_date: date) -> tuple[list[TimeSlot], list[TimeSlot]]:
+    booking_window = get_classroom_booking_window(classroom)
+    day_start = datetime.combine(target_date, booking_window.start_time)
+    day_end = datetime.combine(target_date, booking_window.end_time)
     bookings = _get_room_bookings_for_window(
-        classroom_id=classroom_id,
+        classroom_id=classroom.id,
         start_at=day_start,
         end_at=day_end,
     )
@@ -123,8 +143,13 @@ def list_room_availability(*, classroom_id: int, target_date: date) -> tuple[lis
         )
         for booking in bookings
     ]
-    schedule_slots = _get_room_schedule_slots(classroom_id=classroom_id, target_date=target_date)
-    block_slots = _get_room_block_slots(classroom_id=classroom_id, target_date=target_date)
+    schedule_slots = _get_room_schedule_slots(classroom_id=classroom.id, target_date=target_date)
+    block_slots = _get_room_block_slots(
+        classroom_id=classroom.id,
+        target_date=target_date,
+        day_start=day_start,
+        day_end=day_end,
+    )
     occupied_slots = _merge_occupied_slots(
         [
             slot
@@ -203,6 +228,19 @@ def validate_booking(
 
     if start_at >= end_at:
         return BookingValidationResult(False, reason="借用結束時間需晚於開始時間。")
+
+    booking_window = get_classroom_booking_window(classroom)
+    allowed_start = datetime.combine(start_at.date(), booking_window.start_time)
+    allowed_end = datetime.combine(start_at.date(), booking_window.end_time)
+    if start_at.date() != end_at.date():
+        return BookingValidationResult(False, reason="目前僅開放單日借用。")
+    if start_at < allowed_start or end_at > allowed_end:
+        return BookingValidationResult(
+            False,
+            reason=(
+                f"此教室可借用時段為 {booking_window.start_time:%H:%M}-{booking_window.end_time:%H:%M}。"
+            ),
+        )
 
     duration_hours = (end_at - start_at).total_seconds() / 3600
     max_hours_per_booking = get_int_rule("max_hours_per_booking", 2)

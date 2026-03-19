@@ -12,6 +12,7 @@ from app.modules.notifications.services import create_notification, create_notif
 from app.modules.booking.services import (
     cancel_booking,
     create_booking,
+    get_classroom_booking_window,
     list_room_availability,
     list_visible_bookings_for_role,
 )
@@ -119,10 +120,8 @@ def availability():
     except ValueError:
         return jsonify({"error": "日期格式不正確。"}), 400
 
-    occupied_slots, available_slots = list_room_availability(
-        classroom_id=classroom.id,
-        target_date=target_date,
-    )
+    booking_window = get_classroom_booking_window(classroom)
+    occupied_slots, available_slots = list_room_availability(classroom=classroom, target_date=target_date)
     return jsonify(
         {
             "classroom": {
@@ -132,8 +131,8 @@ def availability():
             },
             "date": target_date.isoformat(),
             "window": {
-                "start": "08:00",
-                "end": "22:00",
+                "start": booking_window.start_time.strftime("%H:%M"),
+                "end": booking_window.end_time.strftime("%H:%M"),
             },
             "occupied_slots": [
                 {

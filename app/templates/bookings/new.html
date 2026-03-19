@@ -14,7 +14,7 @@
     </div>
     <div class="quick-card">
       <div class="quick-card-title">顯示空檔</div>
-      <div class="quick-card-value">08:00 - 22:00</div>
+      <div id="booking-window-card" class="quick-card-value">依教室設定</div>
     </div>
   </div>
 </div>
@@ -120,7 +120,7 @@
       <div class="sheet-section">
         <div class="quick-card">
           <div class="quick-card-title">使用方式</div>
-          <div class="muted small mt-2">點右側空檔即可自動帶入開始與結束時間。系統目前以當日 08:00 至 22:00 作為可借用時間窗。</div>
+          <div id="booking-window-note" class="muted small mt-2">點右側空檔即可自動帶入開始與結束時間。可借用時段會依教室設定顯示。</div>
         </div>
       </div>
     </div>
@@ -136,6 +136,8 @@
     const errorBox = document.querySelector('#availability-error');
     const availableSlots = document.querySelector('#available-slots');
     const occupiedSlots = document.querySelector('#occupied-slots');
+    const bookingWindowCard = document.querySelector('#booking-window-card');
+    const bookingWindowNote = document.querySelector('#booking-window-note');
 
     function toLocalInputValue(date) {
       const offset = date.getTimezoneOffset();
@@ -186,6 +188,8 @@
       const startDate = startAtInput.value ? startAtInput.value.slice(0, 10) : '';
       if (!classroomId || !startDate) {
         summary.textContent = '請先選教室與開始日期。';
+        bookingWindowCard.textContent = '依教室設定';
+        bookingWindowNote.textContent = '點右側空檔即可自動帶入開始與結束時間。可借用時段會依教室設定顯示。';
         errorBox.classList.add('d-none');
         renderEmpty(availableSlots, '尚未載入。');
         renderEmpty(occupiedSlots, '尚未載入。');
@@ -203,10 +207,13 @@
         }
 
         summary.textContent = `${data.classroom.code} ${data.classroom.name} - ${data.date}`;
+        bookingWindowCard.textContent = `${data.window.start} - ${data.window.end}`;
+        bookingWindowNote.textContent = `點右側空檔即可自動帶入開始與結束時間。此教室可借用時段為 ${data.window.start} - ${data.window.end}。`;
         renderSlots(availableSlots, data.available_slots, 'btn-outline-success', '當日已無可借用空檔。');
         renderSlots(occupiedSlots, data.occupied_slots, 'btn-outline-secondary', '目前尚無借用。');
       } catch (error) {
         summary.textContent = '無法取得可借用時段。';
+        bookingWindowCard.textContent = '讀取失敗';
         errorBox.textContent = error.message;
         errorBox.classList.remove('d-none');
         renderEmpty(availableSlots, '讀取失敗。');

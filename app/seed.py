@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import click
 from flask import Flask
+from sqlalchemy import text
 
 from app.extensions import db
 from app.models import Classroom, Role, SystemRule
@@ -36,6 +37,26 @@ DEFAULT_CLASSROOMS = [
 
 def init_db_schema() -> None:
     db.create_all()
+    _ensure_classroom_time_window_columns()
+
+
+def _ensure_classroom_time_window_columns() -> None:
+    inspector = db.inspect(db.engine)
+    if "classrooms" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("classrooms")}
+    statements: list[str] = []
+    if "booking_start_time" not in columns:
+        statements.append("ALTER TABLE classrooms ADD COLUMN booking_start_time TIME NOT NULL DEFAULT '08:00:00'")
+    if "booking_end_time" not in columns:
+        statements.append("ALTER TABLE classrooms ADD COLUMN booking_end_time TIME NOT NULL DEFAULT '22:00:00'")
+
+    for statement in statements:
+        db.session.execute(text(statement))
+
+    if statements:
+        db.session.commit()
 
 
 def seed_default_data() -> None:

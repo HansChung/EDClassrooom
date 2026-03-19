@@ -264,6 +264,13 @@ def upsert_classroom():
     room.location = request.form["location"].strip()
     room.capacity = int(request.form["capacity"])
     room.is_online_bookable = request.form.get("is_online_bookable") == "on"
+    booking_start_time = datetime.strptime(request.form["booking_start_time"], "%H:%M").time()
+    booking_end_time = datetime.strptime(request.form["booking_end_time"], "%H:%M").time()
+    if booking_start_time >= booking_end_time:
+        flash("教室可借用結束時間需晚於開始時間。", "danger")
+        return redirect(url_for("admin.dashboard"))
+    room.booking_start_time = booking_start_time
+    room.booking_end_time = booking_end_time
     room.note = request.form.get("note", "").strip() or None
     db.session.commit()
     flash("教室資料已更新。", "success")

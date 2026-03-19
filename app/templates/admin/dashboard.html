@@ -13,8 +13,16 @@
       <form method="post" action="{{ url_for('admin.upsert_classroom') }}" class="row g-2">
         <div class="col-4"><input name="code" class="form-control" placeholder="教室編號" required></div>
         <div class="col-8"><input name="name" class="form-control" placeholder="教室名稱" required></div>
-        <div class="col-6"><input name="location" class="form-control" placeholder="地點" required></div>
-        <div class="col-6"><input name="capacity" type="number" class="form-control" placeholder="容納人數" required></div>
+        <div class="col-md-4"><input name="location" class="form-control" placeholder="地點" required></div>
+        <div class="col-md-4"><input name="capacity" type="number" class="form-control" placeholder="容納人數" required></div>
+        <div class="col-md-2">
+          <label class="form-label">開放起始</label>
+          <input name="booking_start_time" type="time" class="form-control" value="08:00" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">開放結束</label>
+          <input name="booking_end_time" type="time" class="form-control" value="22:00" required>
+        </div>
         <div class="col-12">
           <label class="form-check-label">
             <input type="checkbox" name="is_online_bookable" class="form-check-input" checked>
@@ -27,7 +35,7 @@
       <hr>
       <ul class="small mb-0">
         {% for room in rooms %}
-          <li>{{ room.code }} {{ room.name }} / {{ room.location }} / {{ "線上" if room.is_online_bookable else "人工登記" }}</li>
+          <li>{{ room.code }} {{ room.name }} / {{ room.location }} / {{ room.booking_start_time.strftime("%H:%M") }} - {{ room.booking_end_time.strftime("%H:%M") }} / {{ "線上" if room.is_online_bookable else "人工登記" }}</li>
         {% endfor %}
       </ul>
     </div>
