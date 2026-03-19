@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from datetime import datetime
 from io import BytesIO, StringIO
 from zipfile import BadZipFile
@@ -9,10 +10,11 @@ from xml.parsers.expat import ExpatError
 
 from flask import Response, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from odf.opendocument import load
+from odf.opendocument import OpenDocumentSpreadsheet, load
 from odf import teletype
 from odf.table import Table, TableCell, TableRow
-from openpyxl import load_workbook
+from odf.text import P
+from openpyxl import Workbook, load_workbook
 
 from app.extensions import db
 from app.models import BookingRequest, Classroom, ClassroomBlock, CourseSchedule, Role, SystemRule, User
@@ -32,6 +34,31 @@ REQUIRED_SCHEDULE_COLUMNS = {
     "semester_label",
     "is_active",
 }
+
+
+def _get_dashboard_context() -> dict:
+    rooms = db.session.query(Classroom).order_by(Classroom.code.asc()).all()
+    rules = db.session.query(SystemRule).order_by(SystemRule.key.asc()).all()
+    users = db.session.query(User).order_by(User.display_name.asc()).limit(100).all()
+    schedules = (
+        db.session.query(CourseSchedule)
+        .join(Classroom)
+        .order_by(Classroom.code.asc(), CourseSchedule.weekday.asc(), CourseSchedule.start_time.asc())
+        .all()
+    )
+    blocks = (
+        db.session.query(ClassroomBlock)
+        .join(Classroom)
+        .order_by(ClassroomBlock.start_at.asc(), Classroom.code.asc())
+        .all()
+    )
+    return {
+        "rooms": rooms,
+        "rules": rules,
+        "users": users,
+        "schedules": schedules,
+        "blocks": blocks,
+    }
 
 
 def _normalize_schedule_columns(fieldnames: list[str] | None) -> list[str]:
@@ -110,33 +137,117 @@ def _read_schedule_rows(file_storage) -> tuple[list[dict[str, str]], list[str]]:
     raise ValueError("目前僅支援 CSV、XLSX、ODS 格式。")
 
 
+def _validate_schedule_rows(rows: list[dict[str, str]]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    valid_rows: list[dict[str, str]] = []
+    errors: list[dict[str, str]] = []
+    for index, row in enumerate(rows, start=2):
+        messages: list[str] = []
+        classroom_code = (row.get("classroom_code") or "").strip().upper()
+        course_name = (row.get("course_name") or "").strip()
+        instructor_name = (row.get("instructor_name") or "").strip()
+        semester_label = (row.get("semester_label") or "").strip() or "current"
+        is_active_raw = (row.get("is_active") or "").strip().lower()
+
+        classroom = None
+        if not classroom_code:
+            messages.append("缺少 classroom_code")
+        else:
+            classroom = db.session.query(Classroom).filter_by(code=classroom_code).first()
+            if classroom is None:
+                messages.append("找不到對應教室")
+
+        if not course_name:
+            messages.append("缺少 course_name")
+
+        weekday_raw = (row.get("weekday") or "").strip()
+        try:
+            weekday = int(weekday_raw)
+            if weekday < 0 or weekday > 6:
+                raise ValueError
+        except ValueError:
+            messages.append("weekday 需為 0-6")
+            weekday = 0
+
+        start_time_raw = (row.get("start_time") or "").strip()
+        end_time_raw = (row.get("end_time") or "").strip()
+        try:
+            start_time = datetime.strptime(start_time_raw, "%H:%M").time()
+        except ValueError:
+            messages.append("start_time 格式需為 HH:MM")
+            start_time = None
+
+        try:
+            end_time = datetime.strptime(end_time_raw, "%H:%M").time()
+        except ValueError:
+            messages.append("end_time 格式需為 HH:MM")
+            end_time = None
+
+        if start_time and end_time and start_time >= end_time:
+            messages.append("結束時間需晚於開始時間")
+
+        if is_active_raw not in {"", "0", "1", "true", "false", "yes", "no", "y", "n"}:
+            messages.append("is_active 需為 true/false 或 1/0")
+
+        if messages:
+            errors.append(
+                {
+                    "row_number": str(index),
+                    "classroom_code": classroom_code or "-",
+                    "course_name": course_name or "-",
+                    "messages": "、".join(messages),
+                }
+            )
+            continue
+
+        valid_rows.append(
+            {
+                "classroom_id": classroom.id,
+                "classroom_code": classroom_code,
+                "course_name": course_name,
+                "instructor_name": instructor_name,
+                "weekday": weekday,
+                "start_time": start_time.strftime("%H:%M"),
+                "end_time": end_time.strftime("%H:%M"),
+                "semester_label": semester_label,
+                "is_active": is_active_raw in {"1", "true", "yes", "y"},
+            }
+        )
+
+    return valid_rows, errors
+
+
+def _persist_schedule_rows(valid_rows: list[dict[str, str]]) -> int:
+    imported = 0
+    for row in valid_rows:
+        schedule = CourseSchedule(
+            classroom_id=row["classroom_id"],
+            course_name=row["course_name"],
+            instructor_name=row["instructor_name"] or None,
+            weekday=row["weekday"],
+            start_time=datetime.strptime(row["start_time"], "%H:%M").time(),
+            end_time=datetime.strptime(row["end_time"], "%H:%M").time(),
+            semester_label=row["semester_label"],
+            is_active=bool(row["is_active"]),
+        )
+        db.session.add(schedule)
+        imported += 1
+    db.session.commit()
+    return imported
+
+
+def _build_csv_template_text() -> str:
+    return (
+        "classroom_code,course_name,instructor_name,weekday,start_time,end_time,semester_label,is_active\n"
+        "L105,資料結構,王老師,0,09:00,11:00,114-2,true\n"
+        "ED202,教學設計,陳老師,2,13:00,15:00,114-2,true\n"
+    )
+
+
 @bp.route("/")
 @login_required
 @roles_required("super_admin", "staff_manager", "workstudy_manager")
 def dashboard():
-    rooms = db.session.query(Classroom).order_by(Classroom.code.asc()).all()
-    rules = db.session.query(SystemRule).order_by(SystemRule.key.asc()).all()
-    users = db.session.query(User).order_by(User.display_name.asc()).limit(100).all()
-    schedules = (
-        db.session.query(CourseSchedule)
-        .join(Classroom)
-        .order_by(Classroom.code.asc(), CourseSchedule.weekday.asc(), CourseSchedule.start_time.asc())
-        .all()
-    )
-    blocks = (
-        db.session.query(ClassroomBlock)
-        .join(Classroom)
-        .order_by(ClassroomBlock.start_at.asc(), Classroom.code.asc())
-        .all()
-    )
-    return render_template(
-        "admin/dashboard.html",
-        rooms=rooms,
-        rules=rules,
-        users=users,
-        schedules=schedules,
-        blocks=blocks,
-    )
+    return render_template("admin/dashboard.html", **_get_dashboard_context())
 
 
 @bp.route("/classrooms", methods=["POST"])
@@ -283,6 +394,20 @@ def delete_schedule(schedule_id: int):
 @login_required
 @roles_required("super_admin", "staff_manager")
 def import_schedules():
+    preview_payload = request.form.get("preview_payload", "").strip()
+    if preview_payload:
+        try:
+            valid_rows = json.loads(preview_payload)
+        except json.JSONDecodeError:
+            flash("匯入預覽資料已失效，請重新上傳檔案。", "danger")
+            return redirect(url_for("admin.dashboard"))
+        if not valid_rows:
+            flash("沒有可匯入的資料列。", "danger")
+            return redirect(url_for("admin.dashboard"))
+        imported = _persist_schedule_rows(valid_rows)
+        flash(f"課表匯入完成，新增 {imported} 筆。", "success")
+        return redirect(url_for("admin.dashboard"))
+
     file = request.files.get("schedule_file")
     if file is None or not file.filename:
         flash("請選擇要匯入的課表檔案。", "danger")
@@ -301,65 +426,75 @@ def import_schedules():
         flash("匯入欄位不足，需包含 classroom_code, course_name, instructor_name, weekday, start_time, end_time, semester_label, is_active。", "danger")
         return redirect(url_for("admin.dashboard"))
 
-    imported = 0
-    skipped = 0
-    for row in rows:
-        try:
-            classroom_code = (row.get("classroom_code") or "").strip().upper()
-            classroom = db.session.query(Classroom).filter_by(code=classroom_code).first()
-            if classroom is None:
-                skipped += 1
-                continue
+    valid_rows, errors = _validate_schedule_rows(rows)
+    if not valid_rows and not errors:
+        flash("匯入檔案沒有可讀取的資料列。", "danger")
+        return redirect(url_for("admin.dashboard"))
 
-            course_name = (row.get("course_name") or "").strip()
-            if not course_name:
-                skipped += 1
-                continue
-
-            weekday = int((row.get("weekday") or "0").strip())
-            if weekday < 0 or weekday > 6:
-                skipped += 1
-                continue
-
-            start_time = datetime.strptime((row.get("start_time") or "").strip(), "%H:%M").time()
-            end_time = datetime.strptime((row.get("end_time") or "").strip(), "%H:%M").time()
-            if start_time >= end_time:
-                skipped += 1
-                continue
-
-            schedule = CourseSchedule(
-                classroom_id=classroom.id,
-                course_name=course_name,
-                instructor_name=(row.get("instructor_name") or "").strip() or None,
-                weekday=weekday,
-                start_time=start_time,
-                end_time=end_time,
-                semester_label=(row.get("semester_label") or "").strip() or "current",
-                is_active=(row.get("is_active") or "").strip().lower() in {"1", "true", "yes", "y"},
-            )
-            db.session.add(schedule)
-            imported += 1
-        except (TypeError, ValueError):
-            skipped += 1
-
-    db.session.commit()
-    flash(f"課表匯入完成，新增 {imported} 筆，略過 {skipped} 筆。", "success")
-    return redirect(url_for("admin.dashboard"))
+    context = _get_dashboard_context()
+    context["schedule_import_preview"] = valid_rows
+    context["schedule_import_errors"] = errors
+    context["schedule_import_filename"] = file.filename
+    context["schedule_import_payload"] = json.dumps(valid_rows, ensure_ascii=False)
+    if errors:
+        flash(f"預覽完成，可匯入 {len(valid_rows)} 筆，錯誤 {len(errors)} 筆。", "warning")
+    else:
+        flash(f"預覽完成，可匯入 {len(valid_rows)} 筆。", "info")
+    return render_template("admin/dashboard.html", **context)
 
 
 @bp.route("/schedules/template.csv")
 @login_required
 @roles_required("super_admin", "staff_manager")
 def download_schedule_template():
-    payload = (
-        "classroom_code,course_name,instructor_name,weekday,start_time,end_time,semester_label,is_active\n"
-        "L105,資料結構,王老師,0,09:00,11:00,114-2,true\n"
-        "ED202,教學設計,陳老師,2,13:00,15:00,114-2,true\n"
-    )
+    payload = _build_csv_template_text()
     return Response(
         payload,
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=course-schedule-template.csv"},
+    )
+
+
+@bp.route("/schedules/template.xlsx")
+@login_required
+@roles_required("super_admin", "staff_manager")
+def download_schedule_template_xlsx():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Schedules"
+    for row in csv.reader(StringIO(_build_csv_template_text())):
+        sheet.append(row)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return Response(
+        buffer.getvalue(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=course-schedule-template.xlsx"},
+    )
+
+
+@bp.route("/schedules/template.ods")
+@login_required
+@roles_required("super_admin", "staff_manager")
+def download_schedule_template_ods():
+    spreadsheet = OpenDocumentSpreadsheet()
+    table = Table(name="Schedules")
+    spreadsheet.spreadsheet.addElement(table)
+    for values in csv.reader(StringIO(_build_csv_template_text())):
+        row = TableRow()
+        for value in values:
+            cell = TableCell()
+            cell.addElement(P(text=value))
+            row.addElement(cell)
+        table.addElement(row)
+    buffer = BytesIO()
+    spreadsheet.save(buffer)
+    buffer.seek(0)
+    return Response(
+        buffer.getvalue(),
+        mimetype="application/vnd.oasis.opendocument.spreadsheet",
+        headers={"Content-Disposition": "attachment; filename=course-schedule-template.ods"},
     )
 
 
