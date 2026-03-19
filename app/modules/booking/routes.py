@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -13,6 +13,7 @@ from app.modules.booking.services import (
     cancel_booking,
     create_booking,
     get_classroom_booking_window,
+    list_room_grid_cells,
     list_room_availability,
     list_visible_bookings_for_role,
 )
@@ -36,6 +37,77 @@ def _format_slot_duration(slot_start: datetime, slot_end: datetime) -> str:
     return f"{minutes}m"
 
 
+def _build_new_booking_context(*, target_date: date | None = None, selected_location: str | None = None) -> dict:
+    rooms = (
+        db.session.query(Classroom)
+        .filter(Classroom.is_active.is_(True), Classroom.is_online_bookable.is_(True))
+        .order_by(Classroom.location.asc(), Classroom.code.asc())
+        .all()
+    )
+    available_locations = sorted({room.location for room in rooms})
+    if target_date is None:
+        target_date = datetime.now().date()
+    if selected_location not in available_locations and available_locations:
+        selected_location = available_locations[0]
+    filtered_rooms = [room for room in rooms if not selected_location or room.location == selected_location]
+
+    time_headers: list[dict[str, str]] = []
+    if filtered_rooms:
+        min_start = min(get_classroom_booking_window(room).start_time for room in filtered_rooms)
+        max_end = max(get_classroom_booking_window(room).end_time for room in filtered_rooms)
+        cursor = datetime.combine(target_date, min_start)
+        day_end = datetime.combine(target_date, max_end)
+        while cursor < day_end:
+            slot_end = min(cursor + timedelta(hours=1), day_end)
+            time_headers.append(
+                {
+                    "key": cursor.strftime("%H:%M"),
+                    "label": f"{cursor:%H:%M}",
+                    "end_label": f"{slot_end:%H:%M}",
+                }
+            )
+            cursor = slot_end
+
+    room_rows = []
+    for room in filtered_rooms:
+        window = get_classroom_booking_window(room)
+        grid_cells = list_room_grid_cells(classroom=room, target_date=target_date)
+        cell_map = {cell.start_at.strftime("%H:%M"): cell for cell in grid_cells}
+        aligned_cells = []
+        for header in time_headers:
+            cell = cell_map.get(header["key"])
+            if cell is None:
+                header_start = datetime.combine(target_date, datetime.strptime(header["key"], "%H:%M").time())
+                header_end = min(header_start + timedelta(hours=1), datetime.combine(target_date, max_end))
+                aligned_cells.append(
+                    {
+                        "start_at": header_start,
+                        "end_at": header_end,
+                        "status": "outside",
+                        "label": "",
+                        "title": "",
+                    }
+                )
+            else:
+                aligned_cells.append(cell)
+        room_rows.append(
+            {
+                "room": room,
+                "window": f"{window.start_time:%H:%M}-{window.end_time:%H:%M}",
+                "cells": aligned_cells,
+            }
+        )
+
+    return {
+        "rooms": rooms,
+        "available_locations": available_locations,
+        "selected_location": selected_location,
+        "target_date": target_date.isoformat(),
+        "time_headers": time_headers,
+        "room_rows": room_rows,
+    }
+
+
 @bp.route("/")
 @login_required
 def list_bookings():
@@ -47,12 +119,15 @@ def list_bookings():
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
 def new_booking():
-    rooms = (
-        db.session.query(Classroom)
-        .filter(Classroom.is_active.is_(True), Classroom.is_online_bookable.is_(True))
-        .order_by(Classroom.code.asc())
-        .all()
-    )
+    target_date_raw = (request.values.get("target_date") or "").strip()
+    selected_location = (request.values.get("location") or "").strip() or None
+    try:
+        target_date = datetime.strptime(target_date_raw, "%Y-%m-%d").date() if target_date_raw else datetime.now().date()
+    except ValueError:
+        target_date = datetime.now().date()
+
+    context = _build_new_booking_context(target_date=target_date, selected_location=selected_location)
+    rooms = context["rooms"]
     if request.method == "POST":
         classroom = db.session.get(Classroom, int(request.form["classroom_id"]))
         if classroom is None:
@@ -72,7 +147,7 @@ def new_booking():
             )
         except ValueError as exc:
             flash(str(exc), "danger")
-            return render_template("bookings/new.html", rooms=rooms)
+            return render_template("bookings/new.html", **context)
 
         if booking.status == "approved":
             flash("借用已自動核准。", "success")
@@ -99,7 +174,7 @@ def new_booking():
         db.session.commit()
         return redirect(url_for("booking.list_bookings"))
 
-    return render_template("bookings/new.html", rooms=rooms)
+    return render_template("bookings/new.html", **context)
 
 
 @bp.route("/availability")

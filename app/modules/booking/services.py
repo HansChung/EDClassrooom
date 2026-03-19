@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import and_, func
 
@@ -28,6 +28,15 @@ class TimeSlot:
 class BookingWindow:
     start_time: time
     end_time: time
+
+
+@dataclass
+class RoomGridCell:
+    start_at: datetime
+    end_at: datetime
+    status: str
+    label: str = ""
+    title: str = ""
 
 
 def _get_room_bookings_for_window(
@@ -170,6 +179,63 @@ def list_room_availability(*, classroom: Classroom, target_date: date) -> tuple[
         available_slots.append(TimeSlot(start_at=cursor, end_at=day_end))
 
     return occupied_slots, available_slots
+
+
+def list_room_grid_cells(*, classroom: Classroom, target_date: date) -> list[RoomGridCell]:
+    booking_window = get_classroom_booking_window(classroom)
+    day_start = datetime.combine(target_date, booking_window.start_time)
+    day_end = datetime.combine(target_date, booking_window.end_time)
+    slots: list[RoomGridCell] = []
+
+    bookings = _get_room_bookings_for_window(
+        classroom_id=classroom.id,
+        start_at=day_start,
+        end_at=day_end,
+    )
+    schedules = _get_room_schedule_slots(classroom_id=classroom.id, target_date=target_date)
+    blocks = _get_room_block_slots(
+        classroom_id=classroom.id,
+        target_date=target_date,
+        day_start=day_start,
+        day_end=day_end,
+    )
+
+    booking_slots = []
+    for booking in bookings:
+        booking_slots.append(
+            (
+                max(booking.start_at, day_start),
+                min(booking.end_at, day_end),
+                "pending" if booking.status in {"pending", "pending_approval"} else "booked",
+                booking.title,
+            )
+        )
+
+    schedule_slots = [(slot.start_at, slot.end_at, "schedule", slot.label) for slot in schedules]
+    block_slots = [(slot.start_at, slot.end_at, "block", slot.label) for slot in blocks]
+    occupied_slots = block_slots + schedule_slots + booking_slots
+
+    cursor = day_start
+    while cursor < day_end:
+        slot_end = min(cursor + timedelta(hours=1), day_end)
+        status = "available"
+        label = ""
+        title = ""
+        for occupied_start, occupied_end, occupied_status, occupied_label in occupied_slots:
+            if occupied_start < slot_end and occupied_end > cursor:
+                status = occupied_status
+                label = {
+                    "booked": "借",
+                    "pending": "申",
+                    "schedule": "課",
+                    "block": "停",
+                }[occupied_status]
+                title = occupied_label
+                break
+        slots.append(RoomGridCell(start_at=cursor, end_at=slot_end, status=status, label=label, title=title))
+        cursor = slot_end
+
+    return slots
 
 
 def has_schedule_conflict(*, classroom_id: int, start_at: datetime, end_at: datetime) -> CourseSchedule | None:

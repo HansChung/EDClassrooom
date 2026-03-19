@@ -607,6 +607,73 @@ textarea.form-control {
   align-items: center;
 }
 
+.booking-grid-shell {
+  overflow-x: auto;
+}
+
+.booking-grid-table-inner {
+  min-width: 1100px;
+  margin-bottom: 0;
+}
+
+.booking-grid-table-inner th,
+.booking-grid-table-inner td {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.booking-grid-cell {
+  min-width: 64px;
+  padding: 0.45rem 0.35rem !important;
+}
+
+.booking-grid-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.booking-grid-slot-available {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.booking-grid-slot-available:hover {
+  background: rgba(0, 113, 227, 0.08);
+  border-color: rgba(0, 113, 227, 0.25);
+}
+
+.booking-grid-slot-booked {
+  background: rgba(0, 113, 227, 0.16);
+  color: var(--blue-dark);
+}
+
+.booking-grid-slot-pending {
+  background: rgba(52, 199, 89, 0.2);
+  color: #267c3d;
+}
+
+.booking-grid-slot-schedule {
+  background: rgba(255, 159, 10, 0.18);
+  color: #a15d00;
+}
+
+.booking-grid-slot-block {
+  background: rgba(255, 59, 48, 0.16);
+  color: #b42318;
+}
+
+.booking-grid-slot-outside {
+  background: rgba(15, 23, 42, 0.04);
+  color: transparent;
+  border-style: dashed;
+}
+
 .mobile-tabbar {
   position: fixed;
   left: 50%;
