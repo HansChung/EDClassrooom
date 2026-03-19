@@ -4,6 +4,7 @@ from flask_login import current_user, login_required
 from app.extensions import db
 from app.models import AuditLog, BookingApproval, BookingRequest
 from app.modules.approval import bp
+from app.modules.notifications.services import create_notification
 from app.security import roles_required
 
 
@@ -52,6 +53,12 @@ def action(booking_id: int):
             entity_id=str(booking.id),
             payload={"comment": comment},
         )
+    )
+    create_notification(
+        user_id=booking.requester_id,
+        title="借用審核結果更新",
+        body=f"{booking.classroom.code} {booking.title} 已{ '核准' if action_name == 'approved' else '駁回' }。",
+        link=url_for("booking.list_bookings"),
     )
     db.session.commit()
     flash("審核結果已更新。", "success")

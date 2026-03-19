@@ -204,3 +204,15 @@ class AuditLog(db.Model):
     entity_id: Mapped[str] = mapped_column(db.String(80), nullable=False)
     payload: Mapped[dict[str, Any] | None] = mapped_column(db.JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False, index=True)
+
+
+class Notification(db.Model):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(db.ForeignKey("users.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    body: Mapped[str] = mapped_column(db.String(500), nullable=False)
+    link: Mapped[str | None] = mapped_column(db.String(255), nullable=True)
+    is_read: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False, index=True)

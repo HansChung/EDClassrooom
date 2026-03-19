@@ -5,6 +5,7 @@ from app.models.entities import (
     Classroom,
     ClassroomBlock,
     CourseSchedule,
+    Notification,
     Role,
     SystemRule,
     User,
@@ -22,4 +23,5 @@ __all__ = [
     "BookingApproval",
     "AuditLog",
     "SystemRule",
+    "Notification",
 ]

@@ -4,13 +4,14 @@ import csv
 from datetime import datetime
 from io import StringIO
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import Response, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.extensions import db
-from app.models import Classroom, ClassroomBlock, CourseSchedule, Role, SystemRule, User
+from app.models import BookingRequest, Classroom, ClassroomBlock, CourseSchedule, Role, SystemRule, User
 from app.modules.admin import bp
 from app.modules.booking.services import create_booking
+from app.modules.notifications.services import create_notification
 from app.security import roles_required
 
 
@@ -259,6 +260,22 @@ def import_schedules():
     return redirect(url_for("admin.dashboard"))
 
 
+@bp.route("/schedules/template.csv")
+@login_required
+@roles_required("super_admin", "staff_manager")
+def download_schedule_template():
+    payload = (
+        "classroom_code,course_name,instructor_name,weekday,start_time,end_time,semester_label,is_active\n"
+        "L105,資料結構,王老師,0,09:00,11:00,114-2,true\n"
+        "ED202,教學設計,陳老師,2,13:00,15:00,114-2,true\n"
+    )
+    return Response(
+        payload,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=course-schedule-template.csv"},
+    )
+
+
 @bp.route("/blocks", methods=["POST"])
 @login_required
 @roles_required("super_admin", "staff_manager")
@@ -284,6 +301,23 @@ def upsert_block():
         is_active=request.form.get("is_active") == "on",
     )
     db.session.add(block)
+    impacted_bookings = (
+        db.session.query(BookingRequest)
+        .filter(
+            BookingRequest.classroom_id == classroom.id,
+            BookingRequest.status.in_(["approved", "pending_approval"]),
+            BookingRequest.start_at < end_at,
+            BookingRequest.end_at > start_at,
+        )
+        .all()
+    )
+    for booking in impacted_bookings:
+        create_notification(
+            user_id=booking.requester_id,
+            title="借用時段受到停用影響",
+            body=f"{classroom.code} {booking.title} 與停用時段《{block.title}》重疊，請儘快確認。",
+            link=url_for("booking.list_bookings"),
+        )
     db.session.commit()
     flash("教室停用時段已建立。", "success")
     return redirect(url_for("admin.dashboard"))

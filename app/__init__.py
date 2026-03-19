@@ -39,6 +39,7 @@ def register_blueprints(app: Flask) -> None:
     from app.modules.approval import bp as approval_bp
     from app.modules.admin import bp as admin_bp
     from app.modules.calendar import bp as calendar_bp
+    from app.modules.notifications import bp as notifications_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix="/auth")
@@ -46,6 +47,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(approval_bp, url_prefix="/approvals")
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(calendar_bp, url_prefix="/calendar")
+    app.register_blueprint(notifications_bp, url_prefix="/notifications")
 
 
 def register_cli(app: Flask) -> None:

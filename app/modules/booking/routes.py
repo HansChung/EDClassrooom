@@ -8,6 +8,7 @@ from flask_login import current_user, login_required
 from app.extensions import db
 from app.models import BookingRequest, Classroom
 from app.modules.booking import bp
+from app.modules.notifications.services import create_notification, create_notifications_for_roles
 from app.modules.booking.services import (
     cancel_booking,
     create_booking,
@@ -74,8 +75,27 @@ def new_booking():
 
         if booking.status == "approved":
             flash("借用已自動核准。", "success")
+            create_notification(
+                user_id=current_user.id,
+                title="借用已自動核准",
+                body=f"{classroom.code} {booking.title} 已自動核准。",
+                link=url_for("booking.list_bookings"),
+            )
         else:
             flash("借用已送出，待人工核准。", "warning")
+            create_notification(
+                user_id=current_user.id,
+                title="借用已送出",
+                body=f"{classroom.code} {booking.title} 已送出，待人工核准。",
+                link=url_for("booking.list_bookings"),
+            )
+            create_notifications_for_roles(
+                role_names={"super_admin", "staff_manager"},
+                title="有新的借用待審核",
+                body=f"{current_user.display_name} 送出 {classroom.code} {booking.title} 借用申請。",
+                link=url_for("approval.queue"),
+            )
+        db.session.commit()
         return redirect(url_for("booking.list_bookings"))
 
     return render_template("bookings/new.html", rooms=rooms)
@@ -160,5 +180,12 @@ def cancel(booking_id: int):
         actor=current_user,
         reason=request.form.get("reason", "使用者取消").strip() or "使用者取消",
     )
+    create_notification(
+        user_id=booking.requester_id,
+        title="借用已取消",
+        body=f"{booking.classroom.code} {booking.title} 已取消。",
+        link=url_for("booking.list_bookings"),
+    )
+    db.session.commit()
     flash("已取消借用。", "info")
     return redirect(url_for("booking.list_bookings"))
