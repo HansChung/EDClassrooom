@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime
-from io import StringIO
+from io import BytesIO, StringIO
+from zipfile import BadZipFile
+
+from xml.parsers.expat import ExpatError
 
 from flask import Response, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from odf.opendocument import load
+from odf import teletype
+from odf.table import Table, TableCell, TableRow
+from openpyxl import load_workbook
 
 from app.extensions import db
 from app.models import BookingRequest, Classroom, ClassroomBlock, CourseSchedule, Role, SystemRule, User
@@ -13,6 +20,94 @@ from app.modules.admin import bp
 from app.modules.booking.services import create_booking
 from app.modules.notifications.services import create_notification
 from app.security import roles_required
+
+
+REQUIRED_SCHEDULE_COLUMNS = {
+    "classroom_code",
+    "course_name",
+    "instructor_name",
+    "weekday",
+    "start_time",
+    "end_time",
+    "semester_label",
+    "is_active",
+}
+
+
+def _normalize_schedule_columns(fieldnames: list[str] | None) -> list[str]:
+    return [(name or "").strip() for name in (fieldnames or [])]
+
+
+def _read_schedule_rows_from_csv(file_storage) -> tuple[list[dict[str, str]], list[str]]:
+    content = file_storage.read().decode("utf-8-sig")
+    reader = csv.DictReader(StringIO(content))
+    fieldnames = _normalize_schedule_columns(reader.fieldnames)
+    rows = [{(key or "").strip(): (value or "").strip() for key, value in row.items()} for row in reader]
+    return rows, fieldnames
+
+
+def _read_schedule_rows_from_xlsx(file_storage) -> tuple[list[dict[str, str]], list[str]]:
+    try:
+        workbook = load_workbook(filename=BytesIO(file_storage.read()), data_only=True)
+    except BadZipFile as exc:
+        raise ValueError("XLSX 檔案格式有誤。") from exc
+    sheet = workbook.active
+    rows = list(sheet.iter_rows(values_only=True))
+    if not rows:
+        return [], []
+    headers = _normalize_schedule_columns([str(cell or "").strip() for cell in rows[0]])
+    normalized_rows: list[dict[str, str]] = []
+    for values in rows[1:]:
+        normalized_rows.append(
+            {
+                headers[index]: "" if index >= len(values) or values[index] is None else str(values[index]).strip()
+                for index in range(len(headers))
+            }
+        )
+    return normalized_rows, headers
+
+
+def _cell_text(cell: TableCell) -> str:
+    return teletype.extractText(cell).strip()
+
+
+def _read_schedule_rows_from_ods(file_storage) -> tuple[list[dict[str, str]], list[str]]:
+    try:
+        document = load(BytesIO(file_storage.read()))
+    except (BadZipFile, ExpatError, OSError) as exc:
+        raise ValueError("ODS 檔案格式有誤。") from exc
+    tables = document.spreadsheet.getElementsByType(Table)
+    if not tables:
+        return [], []
+    table = tables[0]
+    raw_rows: list[list[str]] = []
+    for row in table.getElementsByType(TableRow):
+        raw_cells = [_cell_text(cell) for cell in row.getElementsByType(TableCell)]
+        if any(raw_cells):
+            raw_rows.append(raw_cells)
+    if not raw_rows:
+        return [], []
+    headers = _normalize_schedule_columns(raw_rows[0])
+    normalized_rows: list[dict[str, str]] = []
+    for values in raw_rows[1:]:
+        normalized_rows.append(
+            {
+                headers[index]: values[index].strip() if index < len(values) else ""
+                for index in range(len(headers))
+            }
+        )
+    return normalized_rows, headers
+
+
+def _read_schedule_rows(file_storage) -> tuple[list[dict[str, str]], list[str]]:
+    filename = (file_storage.filename or "").lower()
+    if filename.endswith(".csv"):
+        return _read_schedule_rows_from_csv(file_storage)
+    if filename.endswith(".xlsx"):
+        return _read_schedule_rows_from_xlsx(file_storage)
+    if filename.endswith(".ods"):
+        return _read_schedule_rows_from_ods(file_storage)
+    raise ValueError("目前僅支援 CSV、XLSX、ODS 格式。")
 
 
 @bp.route("/")
@@ -190,33 +285,25 @@ def delete_schedule(schedule_id: int):
 def import_schedules():
     file = request.files.get("schedule_file")
     if file is None or not file.filename:
-        flash("請選擇要匯入的 CSV 檔案。", "danger")
+        flash("請選擇要匯入的課表檔案。", "danger")
         return redirect(url_for("admin.dashboard"))
 
     try:
-        content = file.read().decode("utf-8-sig")
+        rows, fieldnames = _read_schedule_rows(file)
     except UnicodeDecodeError:
         flash("CSV 檔案編碼需為 UTF-8。", "danger")
         return redirect(url_for("admin.dashboard"))
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("admin.dashboard"))
 
-    reader = csv.DictReader(StringIO(content))
-    required_columns = {
-        "classroom_code",
-        "course_name",
-        "instructor_name",
-        "weekday",
-        "start_time",
-        "end_time",
-        "semester_label",
-        "is_active",
-    }
-    if not reader.fieldnames or not required_columns.issubset(set(reader.fieldnames)):
-        flash("CSV 欄位不足，需包含 classroom_code, course_name, instructor_name, weekday, start_time, end_time, semester_label, is_active。", "danger")
+    if not fieldnames or not REQUIRED_SCHEDULE_COLUMNS.issubset(set(fieldnames)):
+        flash("匯入欄位不足，需包含 classroom_code, course_name, instructor_name, weekday, start_time, end_time, semester_label, is_active。", "danger")
         return redirect(url_for("admin.dashboard"))
 
     imported = 0
     skipped = 0
-    for row in reader:
+    for row in rows:
         try:
             classroom_code = (row.get("classroom_code") or "").strip().upper()
             classroom = db.session.query(Classroom).filter_by(code=classroom_code).first()

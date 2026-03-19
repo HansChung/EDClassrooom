@@ -85,12 +85,12 @@
         <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100">儲存課表</button></div>
       </form>
       <hr>
-      <h4 class="h6">CSV 匯入課表</h4>
+      <h4 class="h6">匯入課表</h4>
       <form method="post" action="{{ url_for('admin.import_schedules') }}" enctype="multipart/form-data" class="row g-2">
-        <div class="col-md-8"><input type="file" name="schedule_file" class="form-control" accept=".csv" required></div>
-        <div class="col-md-4 d-flex align-items-end"><button class="btn btn-outline-primary w-100">匯入 CSV</button></div>
+        <div class="col-md-8"><input type="file" name="schedule_file" class="form-control" accept=".csv,.xlsx,.ods" required></div>
+        <div class="col-md-4 d-flex align-items-end"><button class="btn btn-outline-primary w-100">匯入檔案</button></div>
         <div class="col-md-4"><a class="btn btn-outline-secondary w-100" href="{{ url_for('admin.download_schedule_template') }}">下載範本 CSV</a></div>
-        <div class="col-12"><div class="muted small">CSV 欄位：classroom_code, course_name, instructor_name, weekday(0-6), start_time(HH:MM), end_time(HH:MM), semester_label, is_active(true/false)</div></div>
+        <div class="col-12"><div class="muted small">支援 CSV、XLSX、ODS。欄位：classroom_code, course_name, instructor_name, weekday(0-6), start_time(HH:MM), end_time(HH:MM), semester_label, is_active(true/false)</div></div>
       </form>
       <div class="table-shell table-responsive mt-3">
         <table class="table table-sm align-middle">
