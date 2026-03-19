@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+import csv
+from io import StringIO
+
+from flask import Response, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.extensions import db
@@ -14,6 +17,7 @@ from app.modules.booking.services import (
     create_booking,
     get_booking_periods,
     get_classroom_booking_window,
+    get_int_rule,
     list_room_grid_cells,
     list_room_availability,
     list_visible_bookings_for_role,
@@ -36,6 +40,15 @@ def _format_slot_duration(slot_start: datetime, slot_end: datetime) -> str:
     if hours:
         return f"{hours}h"
     return f"{minutes}m"
+
+
+def _format_duration(duration_minutes: int) -> str:
+    hours, minutes = divmod(duration_minutes, 60)
+    if hours and minutes:
+        return f"{hours} 小時 {minutes} 分"
+    if hours:
+        return f"{hours} 小時"
+    return f"{minutes} 分"
 
 
 def _status_label(status: str) -> str:
@@ -155,7 +168,22 @@ def _build_new_booking_context(
         "room_rows": room_rows,
         "detail_rows": detail_rows,
         "booking_periods_text": period_text,
+        "max_hours_per_booking": get_int_rule("max_hours_per_booking", 2),
     }
+
+
+def _parse_booking_filters() -> tuple[date, str | None, set[str], int | None, int | None, str]:
+    target_date_raw = (request.values.get("target_date") or "").strip()
+    selected_location = (request.values.get("location") or "").strip() or None
+    selected_room_types = {value.strip() for value in request.values.getlist("room_type") if value.strip()}
+    min_capacity = request.values.get("min_capacity", type=int)
+    max_capacity = request.values.get("max_capacity", type=int)
+    keyword = (request.values.get("keyword") or "").strip()
+    try:
+        target_date = datetime.strptime(target_date_raw, "%Y-%m-%d").date() if target_date_raw else datetime.now().date()
+    except ValueError:
+        target_date = datetime.now().date()
+    return target_date, selected_location, selected_room_types, min_capacity, max_capacity, keyword
 
 
 @bp.route("/")
@@ -169,16 +197,7 @@ def list_bookings():
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
 def new_booking():
-    target_date_raw = (request.values.get("target_date") or "").strip()
-    selected_location = (request.values.get("location") or "").strip() or None
-    selected_room_types = {value.strip() for value in request.values.getlist("room_type") if value.strip()}
-    min_capacity = request.values.get("min_capacity", type=int)
-    max_capacity = request.values.get("max_capacity", type=int)
-    keyword = (request.values.get("keyword") or "").strip()
-    try:
-        target_date = datetime.strptime(target_date_raw, "%Y-%m-%d").date() if target_date_raw else datetime.now().date()
-    except ValueError:
-        target_date = datetime.now().date()
+    target_date, selected_location, selected_room_types, min_capacity, max_capacity, keyword = _parse_booking_filters()
 
     context = _build_new_booking_context(
         target_date=target_date,
@@ -236,6 +255,43 @@ def new_booking():
         return redirect(url_for("booking.list_bookings"))
 
     return render_template("bookings/new.html", **context)
+
+
+@bp.route("/new/details.csv")
+@login_required
+def export_booking_details():
+    target_date, selected_location, selected_room_types, min_capacity, max_capacity, keyword = _parse_booking_filters()
+    context = _build_new_booking_context(
+        target_date=target_date,
+        selected_location=selected_location,
+        selected_room_types=selected_room_types,
+        min_capacity=min_capacity,
+        max_capacity=max_capacity,
+        keyword=keyword,
+    )
+
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["教室代碼", "教室名稱", "空間型態", "節次", "時間", "狀態", "說明"])
+    for item in context["detail_rows"]:
+        writer.writerow(
+            [
+                item["room_code"],
+                item["room_name"],
+                item["room_type"],
+                item["period_code"],
+                item["time_range"],
+                item["status"],
+                item["title"],
+            ]
+        )
+
+    filename = f"booking-details-{context['target_date']}.csv"
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @bp.route("/availability")

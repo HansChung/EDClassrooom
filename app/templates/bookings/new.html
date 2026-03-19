@@ -92,6 +92,10 @@
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div class="muted small">檢視方式</div>
         <div class="booking-detail-filters">
+          <a
+            class="btn btn-sm btn-outline-secondary"
+            href="{{ url_for('booking.export_booking_details', target_date=target_date, location=selected_location, keyword=keyword, min_capacity=min_capacity, max_capacity=max_capacity, room_type=selected_room_types|list) }}"
+          >匯出 CSV</a>
           <button type="button" class="btn btn-sm btn-outline-secondary detail-filter-btn active" data-detail-filter="all">全部</button>
           <button type="button" class="btn btn-sm btn-outline-secondary detail-filter-btn" data-detail-filter="booked">借</button>
           <button type="button" class="btn btn-sm btn-outline-secondary detail-filter-btn" data-detail-filter="pending">申</button>
@@ -193,6 +197,7 @@
           <h3 class="h5 mb-1">送出借用申請</h3>
           <div id="selected-slot-summary" class="muted small">請先從上方空檔矩陣選擇一個時段。</div>
           <div id="selected-period-summary" class="muted small mt-1">尚未選擇節次。</div>
+          <div id="selected-duration-summary" class="muted small mt-1">總時數：0 分</div>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
@@ -245,11 +250,13 @@
 
 <script>
   (() => {
+    const maxHoursPerBooking = Number({{ max_hours_per_booking|tojson }});
     const classroomSelect = document.querySelector('#classroom-select');
     const startAtInput = document.querySelector('#start-at');
     const endAtInput = document.querySelector('#end-at');
     const summary = document.querySelector('#selected-slot-summary');
     const periodSummary = document.querySelector('#selected-period-summary');
+    const durationSummary = document.querySelector('#selected-duration-summary');
     const bookingModalElement = document.querySelector('#bookingModal');
     const bookingModal = new bootstrap.Modal(bookingModalElement);
     const detailFilterButtons = document.querySelectorAll('.detail-filter-btn');
@@ -287,17 +294,20 @@
       if (!selectedButtons.length) {
         summary.textContent = '請先從上方空檔矩陣選擇一個時段。';
         periodSummary.textContent = '尚未選擇節次。';
+        durationSummary.textContent = '總時數：0 分';
         return;
       }
 
       const first = selectedButtons[0];
       const last = selectedButtons[selectedButtons.length - 1];
       const periodCodes = selectedButtons.map((button) => button.dataset.periodCode).join('、');
+      const durationMinutes = Math.round((new Date(last.dataset.end) - new Date(first.dataset.start)) / 60000);
       classroomSelect.value = first.dataset.roomId;
       startAtInput.value = toLocalInputValue(first.dataset.start);
       endAtInput.value = toLocalInputValue(last.dataset.end);
       summary.textContent = `${first.dataset.roomLabel} / ${first.dataset.start.slice(11, 16)} - ${last.dataset.end.slice(11, 16)}`;
       periodSummary.textContent = `節次：${periodCodes}`;
+      durationSummary.textContent = `總時數：${Math.floor(durationMinutes / 60) ? `${Math.floor(durationMinutes / 60)} 小時` : ''}${Math.floor(durationMinutes / 60) && durationMinutes % 60 ? ' ' : ''}${durationMinutes % 60 ? `${durationMinutes % 60} 分` : (!Math.floor(durationMinutes / 60) ? '0 分' : '')}`;
     }
 
     function applyDetailFilter(filter) {
@@ -339,6 +349,20 @@
         selectedButtons.push(button);
       }
       button.classList.add('booking-grid-slot-selected');
+      const first = selectedButtons[0];
+      const last = selectedButtons[selectedButtons.length - 1];
+      const durationHours = (new Date(last.dataset.end) - new Date(first.dataset.start)) / 3600000;
+      if (durationHours > maxHoursPerBooking) {
+        button.classList.remove('booking-grid-slot-selected');
+        if (insertIndex === 0) {
+          selectedButtons.shift();
+        } else {
+          selectedButtons.pop();
+        }
+        updateModalFromSelection();
+        window.alert(`單次借用不可超過 ${maxHoursPerBooking} 小時。`);
+        return;
+      }
       updateModalFromSelection();
       bookingModal.show();
     });
