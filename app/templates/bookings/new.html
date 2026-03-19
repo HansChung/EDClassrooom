@@ -127,6 +127,7 @@
                       class="booking-grid-slot booking-grid-slot-available"
                       data-room-id="{{ row.room.id }}"
                       data-room-label="{{ row.room.code }} {{ row.room.name }}"
+                      data-period-code="{{ cell.period_code }}"
                       data-start="{{ cell.start_at.isoformat() }}"
                       data-end="{{ cell.end_at.isoformat() }}"
                     ></button>
@@ -159,7 +160,7 @@
                     <td>{{ item.room_type }}</td>
                     <td>{{ item.period_code }}</td>
                     <td>{{ item.time_range }}</td>
-                    <td>{{ item.status }}</td>
+                    <td><span class="status-badge booking-detail-badge booking-detail-badge-{{ item.status_code }}">{{ item.status }}</span></td>
                     <td>{{ item.title }}</td>
                   </tr>
                 {% else %}
@@ -181,6 +182,7 @@
         <div>
           <h3 class="h5 mb-1">送出借用申請</h3>
           <div id="selected-slot-summary" class="muted small">請先從上方空檔矩陣選擇一個時段。</div>
+          <div id="selected-period-summary" class="muted small mt-1">尚未選擇節次。</div>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
@@ -237,11 +239,47 @@
     const startAtInput = document.querySelector('#start-at');
     const endAtInput = document.querySelector('#end-at');
     const summary = document.querySelector('#selected-slot-summary');
+    const periodSummary = document.querySelector('#selected-period-summary');
     const bookingModalElement = document.querySelector('#bookingModal');
     const bookingModal = new bootstrap.Modal(bookingModalElement);
+    let selectedButtons = [];
 
     function toLocalInputValue(value) {
       return value.slice(0, 16);
+    }
+
+    function clearSelection() {
+      selectedButtons.forEach((button) => button.classList.remove('booking-grid-slot-selected'));
+      selectedButtons = [];
+    }
+
+    function canExtendSelection(button) {
+      if (!selectedButtons.length) {
+        return true;
+      }
+      const first = selectedButtons[0];
+      const last = selectedButtons[selectedButtons.length - 1];
+      if (button.dataset.roomId !== first.dataset.roomId) {
+        return false;
+      }
+      return button.dataset.start === last.dataset.end;
+    }
+
+    function updateModalFromSelection() {
+      if (!selectedButtons.length) {
+        summary.textContent = '請先從上方空檔矩陣選擇一個時段。';
+        periodSummary.textContent = '尚未選擇節次。';
+        return;
+      }
+
+      const first = selectedButtons[0];
+      const last = selectedButtons[selectedButtons.length - 1];
+      const periodCodes = selectedButtons.map((button) => button.dataset.periodCode).join('、');
+      classroomSelect.value = first.dataset.roomId;
+      startAtInput.value = toLocalInputValue(first.dataset.start);
+      endAtInput.value = toLocalInputValue(last.dataset.end);
+      summary.textContent = `${first.dataset.roomLabel} / ${first.dataset.start.slice(11, 16)} - ${last.dataset.end.slice(11, 16)}`;
+      periodSummary.textContent = `節次：${periodCodes}`;
     }
 
     document.addEventListener('click', (event) => {
@@ -250,11 +288,20 @@
         return;
       }
 
-      classroomSelect.value = button.dataset.roomId;
-      startAtInput.value = toLocalInputValue(button.dataset.start);
-      endAtInput.value = toLocalInputValue(button.dataset.end);
-      summary.textContent = `${button.dataset.roomLabel} / ${button.dataset.start.slice(11, 16)} - ${button.dataset.end.slice(11, 16)}`;
+      if (!canExtendSelection(button)) {
+        clearSelection();
+      }
+      if (!selectedButtons.includes(button)) {
+        selectedButtons.push(button);
+        button.classList.add('booking-grid-slot-selected');
+      }
+      updateModalFromSelection();
       bookingModal.show();
+    });
+
+    bookingModalElement.addEventListener('hidden.bs.modal', () => {
+      clearSelection();
+      updateModalFromSelection();
     });
   })();
 </script>

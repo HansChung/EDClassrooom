@@ -47,6 +47,15 @@ def _status_label(status: str) -> str:
     }.get(status, status)
 
 
+def _status_badge_class(status: str) -> str:
+    return {
+        "booked": "booked",
+        "pending": "pending",
+        "schedule": "schedule",
+        "block": "block",
+    }.get(status, "booked")
+
+
 def _build_new_booking_context(
     *,
     target_date: date | None = None,
@@ -122,6 +131,7 @@ def _build_new_booking_context(
                     "period_code": cell.period_code,
                     "time_range": f"{cell.start_at:%H:%M}-{cell.end_at:%H:%M}",
                     "status": _status_label(cell.status),
+                    "status_code": _status_badge_class(cell.status),
                     "title": cell.title or "-",
                 }
             )
