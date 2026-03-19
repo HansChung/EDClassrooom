@@ -20,21 +20,24 @@
 </div>
 
 <div class="phone-sheet p-4 mb-4">
-  <form method="get" class="row g-4">
+  <form method="get" class="row g-4" id="booking-filter-form">
     <div class="col-xl-3">
       <div class="booking-filter-panel">
         <h3 class="h6 mb-3">篩選條件</h3>
         <div class="mb-3">
           <label class="form-label">借用日期</label>
-          <input type="date" name="target_date" class="form-control" value="{{ target_date }}" required>
+          <input type="date" name="target_date" class="form-control" value="{{ target_date }}" required data-auto-submit="true">
         </div>
         <div class="mb-3">
-          <label class="form-label">大樓</label>
-          <select name="location" class="form-select">
+          <div class="form-label mb-2">大樓</div>
+          <div class="booking-location-selector">
             {% for location in available_locations %}
-              <option value="{{ location }}" {% if location == selected_location %}selected{% endif %}>{{ location }}</option>
+              <label class="booking-location-option {% if location == selected_location %}active{% endif %}">
+                <input type="radio" name="location" value="{{ location }}" {% if location == selected_location %}checked{% endif %} data-auto-submit="true">
+                <span>{{ location }}</span>
+              </label>
             {% endfor %}
-          </select>
+          </div>
         </div>
         <div class="mb-3">
           <label class="form-label">關鍵字</label>
@@ -252,6 +255,7 @@
 <script>
   (() => {
     const maxHoursPerBooking = Number({{ max_hours_per_booking|tojson }});
+    const filterForm = document.querySelector('#booking-filter-form');
     const classroomSelect = document.querySelector('#classroom-select');
     const startAtInput = document.querySelector('#start-at');
     const endAtInput = document.querySelector('#end-at');
@@ -434,6 +438,10 @@
 
     detailFilterButtons.forEach((button) => {
       button.addEventListener('click', () => applyDetailFilter(button.dataset.detailFilter));
+    });
+
+    filterForm.querySelectorAll('[data-auto-submit="true"]').forEach((field) => {
+      field.addEventListener('change', () => filterForm.submit());
     });
 
     applyDetailFilter('all');

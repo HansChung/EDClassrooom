@@ -623,6 +623,51 @@ textarea.form-control {
   gap: 0.55rem;
 }
 
+.booking-location-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.booking-location-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.booking-location-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.booking-location-option span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 0.72rem 1rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.booking-location-option.active span,
+.booking-location-option input:checked + span {
+  background: rgba(0, 113, 227, 0.12);
+  border-color: rgba(0, 113, 227, 0.28);
+  color: var(--blue);
+}
+
+.booking-location-option span:hover {
+  border-color: rgba(0, 113, 227, 0.24);
+  color: var(--blue);
+}
+
 .booking-check {
   display: flex;
   align-items: center;
