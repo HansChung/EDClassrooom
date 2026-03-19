@@ -645,6 +645,17 @@ textarea.form-control {
   color: var(--blue);
 }
 
+.booking-detail-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.detail-filter-btn.active {
+  background: rgba(0, 113, 227, 0.12);
+  color: var(--blue);
+}
+
 .booking-grid-table-inner th,
 .booking-grid-table-inner td {
   white-space: nowrap;

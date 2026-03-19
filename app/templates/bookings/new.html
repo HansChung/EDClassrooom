@@ -89,6 +89,16 @@
           <button class="nav-link" data-bs-toggle="pill" data-bs-target="#booking-detail-tab" type="button" role="tab">已借用明細</button>
         </li>
       </ul>
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div class="muted small">檢視方式</div>
+        <div class="booking-detail-filters">
+          <button type="button" class="btn btn-sm btn-outline-secondary detail-filter-btn active" data-detail-filter="all">全部</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary detail-filter-btn" data-detail-filter="booked">借</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary detail-filter-btn" data-detail-filter="pending">申</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary detail-filter-btn" data-detail-filter="schedule">課</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary detail-filter-btn" data-detail-filter="block">停</button>
+        </div>
+      </div>
 
       <div class="tab-content">
         <div class="tab-pane fade show active" id="booking-grid-tab" role="tabpanel">
@@ -155,7 +165,7 @@
               </thead>
               <tbody>
                 {% for item in detail_rows %}
-                  <tr>
+                  <tr class="detail-row" data-status-code="{{ item.status_code }}">
                     <td>{{ item.room_code }} {{ item.room_name }}</td>
                     <td>{{ item.room_type }}</td>
                     <td>{{ item.period_code }}</td>
@@ -242,6 +252,8 @@
     const periodSummary = document.querySelector('#selected-period-summary');
     const bookingModalElement = document.querySelector('#bookingModal');
     const bookingModal = new bootstrap.Modal(bookingModalElement);
+    const detailFilterButtons = document.querySelectorAll('.detail-filter-btn');
+    const detailRows = document.querySelectorAll('.detail-row');
     let selectedButtons = [];
 
     function toLocalInputValue(value) {
@@ -253,16 +265,22 @@
       selectedButtons = [];
     }
 
-    function canExtendSelection(button) {
+    function findAdjacentIndex(button) {
       if (!selectedButtons.length) {
-        return true;
+        return 0;
       }
       const first = selectedButtons[0];
       const last = selectedButtons[selectedButtons.length - 1];
       if (button.dataset.roomId !== first.dataset.roomId) {
-        return false;
+        return -1;
       }
-      return button.dataset.start === last.dataset.end;
+      if (button.dataset.end === first.dataset.start) {
+        return 0;
+      }
+      if (button.dataset.start === last.dataset.end) {
+        return selectedButtons.length;
+      }
+      return -1;
     }
 
     function updateModalFromSelection() {
@@ -282,19 +300,45 @@
       periodSummary.textContent = `節次：${periodCodes}`;
     }
 
+    function applyDetailFilter(filter) {
+      detailFilterButtons.forEach((button) => {
+        button.classList.toggle('active', button.dataset.detailFilter === filter);
+      });
+      detailRows.forEach((row) => {
+        const matched = filter === 'all' || row.dataset.statusCode === filter;
+        row.classList.toggle('d-none', !matched);
+      });
+    }
+
     document.addEventListener('click', (event) => {
       const button = event.target.closest('.booking-grid-slot-available');
       if (!button) {
         return;
       }
 
-      if (!canExtendSelection(button)) {
+      const existingIndex = selectedButtons.indexOf(button);
+      if (existingIndex !== -1) {
+        button.classList.remove('booking-grid-slot-selected');
+        selectedButtons.splice(existingIndex, 1);
+        updateModalFromSelection();
+        if (selectedButtons.length) {
+          bookingModal.show();
+        } else {
+          bookingModal.hide();
+        }
+        return;
+      }
+
+      const insertIndex = findAdjacentIndex(button);
+      if (insertIndex === -1) {
         clearSelection();
-      }
-      if (!selectedButtons.includes(button)) {
         selectedButtons.push(button);
-        button.classList.add('booking-grid-slot-selected');
+      } else if (insertIndex === 0) {
+        selectedButtons.unshift(button);
+      } else {
+        selectedButtons.push(button);
       }
+      button.classList.add('booking-grid-slot-selected');
       updateModalFromSelection();
       bookingModal.show();
     });
@@ -303,6 +347,12 @@
       clearSelection();
       updateModalFromSelection();
     });
+
+    detailFilterButtons.forEach((button) => {
+      button.addEventListener('click', () => applyDetailFilter(button.dataset.detailFilter));
+    });
+
+    applyDetailFilter('all');
   })();
 </script>
 {% endblock %}
