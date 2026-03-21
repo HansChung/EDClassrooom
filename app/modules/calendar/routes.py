@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from collections import OrderedDict
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from io import BytesIO, StringIO
 
 from flask import Response, render_template, request
@@ -17,8 +18,13 @@ from app.models import BookingRequest, Classroom, ClassroomBlock, CourseSchedule
 from app.modules.calendar import bp
 
 
+LOCAL_TIMEZONE = ZoneInfo("Asia/Taipei")
+
+
 def _to_ics_dt(value: datetime) -> str:
-    utc_time = value.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=LOCAL_TIMEZONE)
+    utc_time = value.astimezone(timezone.utc)
     return utc_time.strftime("%Y%m%dT%H%M%SZ")
 
 

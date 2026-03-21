@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
-from sqlalchemy import and_, func
+from sqlalchemy import and_
 
 from app.extensions import db
 from app.models import (
@@ -373,23 +373,19 @@ def validate_booking(
 
     day_start = start_at.replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = start_at.replace(hour=23, minute=59, second=59, microsecond=999999)
-    daily_hours = (
-        db.session.query(
-            func.coalesce(
-                func.sum(
-                    (func.extract("epoch", BookingRequest.end_at - BookingRequest.start_at) / 3600.0)
-                ),
-                0.0,
-            )
-        )
+    existing_daily_bookings = (
+        db.session.query(BookingRequest)
         .filter(
             BookingRequest.requester_id == requester.id,
             BookingRequest.start_at >= day_start,
             BookingRequest.end_at <= day_end,
-            BookingRequest.status.in_(["approved", "pending"]),
+            BookingRequest.status.in_(["approved", "pending", "pending_approval"]),
         )
-        .scalar()
-        or 0.0
+        .all()
+    )
+    daily_hours = sum(
+        (item.end_at - item.start_at).total_seconds() / 3600.0
+        for item in existing_daily_bookings
     )
     max_hours_per_day = get_int_rule("max_hours_per_day", 3)
     if daily_hours + duration_hours > max_hours_per_day:
