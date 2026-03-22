@@ -78,6 +78,11 @@ def _ensure_schema_columns() -> None:
         for statement in statements:
             db.session.execute(text(statement))
 
+    if "booking_requests" in inspector.get_table_names():
+        booking_columns = {column["name"] for column in inspector.get_columns("booking_requests")}
+        if "reason_category" not in booking_columns:
+            db.session.execute(text("ALTER TABLE booking_requests ADD COLUMN reason_category VARCHAR(40) NOT NULL DEFAULT '其他'"))
+
     if "users" in inspector.get_table_names():
         user_columns = {column["name"] for column in inspector.get_columns("users")}
         if "department" not in user_columns:

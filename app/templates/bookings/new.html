@@ -5,7 +5,7 @@
   <div>
     <div class="eyebrow">借用查詢</div>
     <h2 class="section-title mb-1">教室空檔查詢與借用</h2>
-    <div class="section-subtitle">先選日期與館舍，再直接點選可借用的空白時段。</div>
+    <div class="section-subtitle">先選日期與館舍，再直接點選可借用的空白時段。{% if default_form_state.rebook_booking_id %} 目前已帶入上一筆借用內容，可直接調整後送出。{% endif %}</div>
   </div>
   <div class="action-row">
     <div class="quick-card">
@@ -24,6 +24,14 @@
     <div class="col-xl-3">
       <div class="booking-filter-panel">
         <h3 class="h6 mb-3">篩選條件</h3>
+        <div class="mb-3">
+          <div class="form-label mb-2">常用借用模板</div>
+          <div class="booking-template-list">
+            {% for item in booking_templates %}
+              <button type="button" class="btn btn-sm btn-outline-secondary booking-template-btn" data-template-id="{{ item.id }}">{{ item.label }}</button>
+            {% endfor %}
+          </div>
+        </div>
         <div class="mb-3">
           <label class="form-label">借用日期</label>
           <input type="date" name="target_date" class="form-control" value="{{ target_date }}" required data-auto-submit="true">
@@ -207,6 +215,8 @@
       </div>
       <div class="modal-body">
   <form method="post" class="row g-3" id="booking-modal-form">
+    <input type="hidden" id="default-form-state" value='{{ default_form_state|tojson }}'>
+    <input type="hidden" id="booking-template-state" value='{{ booking_templates|tojson }}'>
     <input type="hidden" name="target_date" value="{{ target_date }}">
     <input type="hidden" name="location" value="{{ selected_location }}">
     <input type="hidden" name="keyword" value="{{ keyword }}">
@@ -225,7 +235,15 @@
     </div>
     <div class="col-md-6">
       <label class="form-label">活動名稱</label>
-      <input name="title" class="form-control" placeholder="例如：專題討論、社團錄音" required>
+      <input id="booking-title" name="title" class="form-control" placeholder="例如：專題討論、社團錄音" value="{{ default_form_state.title }}" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">借用原因分類</label>
+      <select id="reason-category" name="reason_category" class="form-select" required>
+        {% for item in booking_reason_categories %}
+          <option value="{{ item }}" {% if item == default_form_state.reason_category %}selected{% endif %}>{{ item }}</option>
+        {% endfor %}
+      </select>
     </div>
     <div class="col-md-4">
       <label class="form-label">開始時間</label>
@@ -237,11 +255,11 @@
     </div>
     <div class="col-md-4">
       <label class="form-label">預計人數</label>
-      <input name="attendee_count" type="number" class="form-control" min="1" required>
+      <input id="attendee-count" name="attendee_count" type="number" class="form-control" min="1" value="{{ default_form_state.attendee_count }}" required>
     </div>
     <div class="col-12">
       <label class="form-label">用途說明</label>
-      <textarea name="purpose" class="form-control" rows="4" placeholder="請簡要說明借用用途。" required></textarea>
+      <textarea id="booking-purpose" name="purpose" class="form-control" rows="4" placeholder="請簡要說明借用用途。" required>{{ default_form_state.purpose }}</textarea>
     </div>
     <div class="col-12 d-flex justify-content-end">
       <button class="btn btn-primary">送出申請</button>
@@ -257,6 +275,13 @@
     const maxHoursPerBooking = Number({{ max_hours_per_booking|tojson }});
     const filterForm = document.querySelector('#booking-filter-form');
     const classroomSelect = document.querySelector('#classroom-select');
+    const titleInput = document.querySelector('#booking-title');
+    const purposeInput = document.querySelector('#booking-purpose');
+    const attendeeCountInput = document.querySelector('#attendee-count');
+    const reasonCategorySelect = document.querySelector('#reason-category');
+    const defaultFormState = JSON.parse(document.querySelector('#default-form-state').value || '{}');
+    const templateDefinitions = JSON.parse(document.querySelector('#booking-template-state').value || '[]');
+    const templateButtons = document.querySelectorAll('.booking-template-btn');
     const startAtInput = document.querySelector('#start-at');
     const endAtInput = document.querySelector('#end-at');
     const summary = document.querySelector('#selected-slot-summary');
@@ -264,6 +289,36 @@
     const durationSummary = document.querySelector('#selected-duration-summary');
     const bookingModalElement = document.querySelector('#bookingModal');
     const detailFilterButtons = document.querySelectorAll('.detail-filter-btn');
+
+    let selectedTemplateId = defaultFormState.selected_template_id || '';
+
+    function applyBookingDefaults() {
+      if (titleInput && !titleInput.value) {
+        titleInput.value = defaultFormState.title || '';
+      }
+      if (purposeInput && !purposeInput.value) {
+        purposeInput.value = defaultFormState.purpose || '';
+      }
+      if (attendeeCountInput && !attendeeCountInput.value && defaultFormState.attendee_count) {
+        attendeeCountInput.value = defaultFormState.attendee_count;
+      }
+      if (reasonCategorySelect && defaultFormState.reason_category) {
+        reasonCategorySelect.value = defaultFormState.reason_category;
+      }
+    }
+
+    function applyTemplate(templateId) {
+      selectedTemplateId = templateId;
+      const matched = templateDefinitions.find((item) => item.id === templateId);
+      templateButtons.forEach((button) => button.classList.toggle('active', button.dataset.templateId === templateId));
+      if (!matched) {
+        return;
+      }
+      titleInput.value = matched.title || '';
+      purposeInput.value = matched.purpose || '';
+      attendeeCountInput.value = matched.attendee_count || '';
+      reasonCategorySelect.value = matched.reason_category || '其他';
+    }
 
     function createModalController(element) {
       if (window.bootstrap && window.bootstrap.Modal) {
@@ -428,6 +483,11 @@
         return;
       }
       updateModalFromSelection();
+      if (selectedTemplateId) {
+        applyTemplate(selectedTemplateId);
+      } else {
+        applyBookingDefaults();
+      }
       bookingModal.show();
     });
 
@@ -443,6 +503,16 @@
     filterForm.querySelectorAll('[data-auto-submit="true"]').forEach((field) => {
       field.addEventListener('change', () => filterForm.submit());
     });
+
+    templateButtons.forEach((button) => {
+      button.addEventListener('click', () => applyTemplate(button.dataset.templateId));
+    });
+
+    if (selectedTemplateId) {
+      applyTemplate(selectedTemplateId);
+    } else {
+      applyBookingDefaults();
+    }
 
     applyDetailFilter('all');
   })();

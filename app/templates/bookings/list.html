@@ -20,13 +20,13 @@
   <div class="col-md-4">
     <div class="quick-card">
       <div class="quick-card-title">主要操作</div>
-      <div class="quick-card-value">查看狀態 / 取消申請</div>
+      <div class="quick-card-value">再次借用 / 下載行事曆</div>
     </div>
   </div>
   <div class="col-md-4">
     <div class="quick-card">
       <div class="quick-card-title">檢視重點</div>
-      <div class="quick-card-value">狀態與取消操作</div>
+      <div class="quick-card-value">分類、狀態與歷史重用</div>
     </div>
   </div>
 </div>
@@ -38,6 +38,7 @@
         <th>ID</th>
         <th>教室</th>
         <th>活動</th>
+        <th>分類</th>
         <th>時間</th>
         <th>狀態</th>
         <th>操作</th>
@@ -49,21 +50,24 @@
           <td>#{{ item.id }}</td>
           <td>{{ item.classroom.code }} {{ item.classroom.name }}</td>
           <td>{{ item.title }}</td>
+          <td>{{ item.reason_category or '其他' }}</td>
           <td><div>{{ item.start_at }}</div><div class="muted small">{{ item.end_at }}</div></td>
           <td><span class="status-badge status-{{ item.status }}">{{ item.status }}</span></td>
           <td>
-            {% if item.status in ["approved", "pending_approval", "pending"] %}
-              <form method="post" action="{{ url_for('booking.cancel', booking_id=item.id) }}">
-                <input type="hidden" name="reason" value="使用者取消">
-                <button class="btn btn-sm btn-outline-danger">取消</button>
-              </form>
-            {% else %}
-              -
-            {% endif %}
+            <div class="d-flex flex-wrap gap-2">
+              <a href="{{ url_for('booking.new_booking', rebook_id=item.id) }}" class="btn btn-sm btn-outline-primary">再次借用</a>
+              <a href="{{ url_for('booking.export_single_booking_ics', booking_id=item.id) }}" class="btn btn-sm btn-outline-secondary">單筆 ICS</a>
+              {% if item.status in ["approved", "pending_approval", "pending"] %}
+                <form method="post" action="{{ url_for('booking.cancel', booking_id=item.id) }}">
+                  <input type="hidden" name="reason" value="使用者取消">
+                  <button class="btn btn-sm btn-outline-danger">取消</button>
+                </form>
+              {% endif %}
+            </div>
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="6">目前沒有借用資料</td></tr>
+        <tr><td colspan="7">目前沒有借用資料</td></tr>
       {% endfor %}
     </tbody>
   </table>

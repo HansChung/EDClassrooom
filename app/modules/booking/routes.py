@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 import csv
 from io import StringIO
+from zoneinfo import ZoneInfo
 
 from flask import Response, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -24,6 +25,64 @@ from app.modules.booking.services import (
 )
 
 
+LOCAL_TIMEZONE = ZoneInfo("Asia/Taipei")
+BOOKING_REASON_CATEGORIES = ["課程", "活動", "會議", "錄音", "拍攝", "其他"]
+BOOKING_TEMPLATES = [
+    {
+        "id": "seminar",
+        "label": "專題討論",
+        "title": "專題討論",
+        "purpose": "專題小組討論與進度確認。",
+        "attendee_count": 6,
+        "reason_category": "課程",
+    },
+    {
+        "id": "recording",
+        "label": "錄音室借用",
+        "title": "錄音室借用",
+        "purpose": "錄製課程作品或訪談音檔。",
+        "attendee_count": 2,
+        "reason_category": "錄音",
+    },
+    {
+        "id": "meeting",
+        "label": "會議",
+        "title": "會議",
+        "purpose": "召開小組或行政會議。",
+        "attendee_count": 8,
+        "reason_category": "會議",
+    },
+]
+
+
+
+
+def _to_ics_dt(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=LOCAL_TIMEZONE)
+    return value.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _build_default_form_state(rebook_booking: BookingRequest | None) -> dict:
+    state = {
+        "title": "",
+        "purpose": "",
+        "attendee_count": "",
+        "reason_category": "其他",
+        "selected_template_id": "",
+        "rebook_booking_id": rebook_booking.id if rebook_booking else None,
+    }
+    if rebook_booking is None:
+        return state
+    state.update(
+        {
+            "title": rebook_booking.title,
+            "purpose": rebook_booking.purpose,
+            "attendee_count": rebook_booking.attendee_count,
+            "reason_category": rebook_booking.reason_category or "其他",
+        }
+    )
+    return state
 
 
 def _normalize_location(value: str | None) -> str | None:
@@ -96,6 +155,7 @@ def _build_new_booking_context(
     min_capacity: int | None = None,
     max_capacity: int | None = None,
     keyword: str | None = None,
+    rebook_booking: BookingRequest | None = None,
 ) -> dict:
     rooms = (
         db.session.query(Classroom)
@@ -107,6 +167,8 @@ def _build_new_booking_context(
     available_room_types = sorted({room.room_type for room in rooms})
     if target_date is None:
         target_date = datetime.now().date()
+    if rebook_booking is not None and selected_location is None:
+        selected_location = _normalize_location(rebook_booking.classroom.location)
     selected_location = _normalize_location(selected_location)
     if selected_location not in available_locations and available_locations:
         selected_location = available_locations[0]
@@ -189,6 +251,9 @@ def _build_new_booking_context(
         "detail_rows": detail_rows,
         "booking_periods_text": period_text,
         "max_hours_per_booking": get_int_rule("max_hours_per_booking", 2),
+        "booking_reason_categories": BOOKING_REASON_CATEGORIES,
+        "booking_templates": BOOKING_TEMPLATES,
+        "default_form_state": _build_default_form_state(rebook_booking),
     }
 
 
@@ -218,6 +283,12 @@ def list_bookings():
 @login_required
 def new_booking():
     target_date, selected_location, selected_room_types, min_capacity, max_capacity, keyword = _parse_booking_filters()
+    rebook_booking = None
+    rebook_id = request.values.get("rebook_id", type=int)
+    if rebook_id:
+        candidate = db.session.get(BookingRequest, rebook_id)
+        if candidate is not None and (candidate.requester_id == current_user.id or current_user.has_any_role({"super_admin", "staff_manager", "workstudy_manager"})):
+            rebook_booking = candidate
 
     context = _build_new_booking_context(
         target_date=target_date,
@@ -226,6 +297,7 @@ def new_booking():
         min_capacity=min_capacity,
         max_capacity=max_capacity,
         keyword=keyword,
+        rebook_booking=rebook_booking,
     )
     rooms = context["rooms"]
     if request.method == "POST":
@@ -244,6 +316,7 @@ def new_booking():
                 start_at=_parse_local_datetime(request.form["start_at"]),
                 end_at=_parse_local_datetime(request.form["end_at"]),
                 source="online",
+                reason_category=request.form.get("reason_category", "其他").strip() or "其他",
             )
         except ValueError as exc:
             flash(str(exc), "danger")
@@ -373,6 +446,41 @@ def availability():
             ],
         }
     )
+
+
+@bp.route("/<int:booking_id>/event.ics")
+@login_required
+def export_single_booking_ics(booking_id: int):
+    booking = db.session.get(BookingRequest, booking_id)
+    if booking is None:
+        flash("找不到借用單。", "danger")
+        return redirect(url_for("booking.list_bookings"))
+
+    is_owner = booking.requester_id == current_user.id
+    has_manager_role = current_user.has_any_role({"super_admin", "staff_manager", "workstudy_manager"})
+    if not is_owner and not has_manager_role:
+        flash("你沒有下載此借用行事曆的權限。", "danger")
+        return redirect(url_for("booking.list_bookings"))
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//TKU ETD//Classroom Booking//ZH",
+        "CALSCALE:GREGORIAN",
+        "BEGIN:VEVENT",
+        f"UID:booking-{booking.id}@et.tku.edu.tw",
+        f"DTSTAMP:{_to_ics_dt(datetime.utcnow())}",
+        f"DTSTART:{_to_ics_dt(booking.start_at)}",
+        f"DTEND:{_to_ics_dt(booking.end_at)}",
+        f"SUMMARY:{booking.classroom.code} {booking.title}",
+        f"DESCRIPTION:{booking.purpose}",
+        f"LOCATION:{booking.classroom.code} {booking.classroom.name}",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+    payload = "\r\n".join(lines)
+    filename = f"booking-{booking.id}.ics"
+    return Response(payload, mimetype="text/calendar", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 
 @bp.route("/<int:booking_id>/cancel", methods=["POST"])

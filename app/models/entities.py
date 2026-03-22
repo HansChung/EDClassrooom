@@ -177,6 +177,7 @@ class BookingRequest(db.Model):
     )
     title: Mapped[str] = mapped_column(db.String(255), nullable=False)
     purpose: Mapped[str] = mapped_column(db.String(500), nullable=False)
+    reason_category: Mapped[str] = mapped_column(db.String(40), nullable=False, default="其他")
     attendee_count: Mapped[int] = mapped_column(nullable=False)
     start_at: Mapped[datetime] = mapped_column(nullable=False, index=True)
     end_at: Mapped[datetime] = mapped_column(nullable=False, index=True)

@@ -568,6 +568,7 @@ def create_booking(
     start_at: datetime,
     end_at: datetime,
     source: str = "online",
+    reason_category: str = "其他",
 ) -> BookingRequest:
     result = validate_booking(
         requester=requester,
@@ -585,6 +586,7 @@ def create_booking(
         classroom_id=classroom.id,
         title=title,
         purpose=purpose,
+        reason_category=reason_category,
         attendee_count=attendee_count,
         start_at=start_at,
         end_at=end_at,
