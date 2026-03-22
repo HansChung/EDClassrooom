@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Any
 
 from flask_login import UserMixin
@@ -25,6 +25,7 @@ class User(UserMixin, db.Model):
     upn: Mapped[str] = mapped_column(db.String(255), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(db.String(120), nullable=False)
     email: Mapped[str] = mapped_column(db.String(255), nullable=True)
+    department: Mapped[str | None] = mapped_column(db.String(120), nullable=True)
     is_active_user: Mapped[bool] = mapped_column(default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -83,6 +84,7 @@ class Classroom(db.Model):
     bookings: Mapped[list["BookingRequest"]] = relationship(back_populates="classroom")
     schedules: Mapped[list["CourseSchedule"]] = relationship(back_populates="classroom")
     blocks: Mapped[list["ClassroomBlock"]] = relationship(back_populates="classroom")
+    availability_overrides: Mapped[list["ClassroomAvailabilityOverride"]] = relationship(back_populates="classroom")
 
 
 class CourseSchedule(db.Model):
@@ -118,6 +120,25 @@ class BookingPeriod(db.Model):
     end_time: Mapped[time] = mapped_column(nullable=False)
     sort_order: Mapped[int] = mapped_column(nullable=False, default=0, index=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+
+
+class ClassroomAvailabilityOverride(db.Model):
+    __tablename__ = "classroom_availability_overrides"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    classroom_id: Mapped[int | None] = mapped_column(db.ForeignKey("classrooms.id"), nullable=True, index=True)
+    location: Mapped[str | None] = mapped_column(db.String(80), nullable=True, index=True)
+    override_date: Mapped[date] = mapped_column(db.Date, nullable=False, index=True)
+    start_time: Mapped[time | None] = mapped_column(nullable=True)
+    end_time: Mapped[time | None] = mapped_column(nullable=True)
+    is_closed: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    note: Mapped[str | None] = mapped_column(db.String(500), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    classroom: Mapped[Classroom | None] = relationship(back_populates="availability_overrides")
 
 
 class ClassroomBlock(db.Model):

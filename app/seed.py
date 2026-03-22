@@ -20,6 +20,11 @@ DEFAULT_RULES = [
     ("max_hours_per_booking", "2", "單次借用上限（小時）"),
     ("max_hours_per_day", "3", "每日借用總時數上限（小時）"),
     ("auto_approve_max_hours", "2", "自動核准時數上限（小時）"),
+    ("auto_approve_max_attendee_ratio", "0.8", "超過教室容量比例時改為人工審核（0-1）"),
+    ("auto_approve_max_attendee_count", "", "超過此人數改為人工審核，空白代表不限制"),
+    ("auto_approve_end_time", "", "晚於此時間結束時改為人工審核，格式 HH:MM，空白代表不限制"),
+    ("auto_approve_excluded_classrooms", "", "不可自動核准的教室代碼，以逗號分隔"),
+    ("auto_approve_required_department", "", "限定特定系所才能自動核准，空白代表不限制"),
 ]
 
 DEFAULT_BOOKING_PERIODS = [
@@ -55,28 +60,30 @@ DEFAULT_CLASSROOMS = [
 
 def init_db_schema() -> None:
     db.create_all()
-    _ensure_classroom_time_window_columns()
+    _ensure_schema_columns()
 
 
-def _ensure_classroom_time_window_columns() -> None:
+def _ensure_schema_columns() -> None:
     inspector = db.inspect(db.engine)
-    if "classrooms" not in inspector.get_table_names():
-        return
 
-    columns = {column["name"] for column in inspector.get_columns("classrooms")}
-    statements: list[str] = []
-    if "booking_start_time" not in columns:
-        statements.append("ALTER TABLE classrooms ADD COLUMN booking_start_time TIME NOT NULL DEFAULT '08:00:00'")
-    if "booking_end_time" not in columns:
-        statements.append("ALTER TABLE classrooms ADD COLUMN booking_end_time TIME NOT NULL DEFAULT '22:00:00'")
-    if "room_type" not in columns:
-        statements.append("ALTER TABLE classrooms ADD COLUMN room_type VARCHAR(40) NOT NULL DEFAULT '教室'")
+    if "classrooms" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("classrooms")}
+        statements: list[str] = []
+        if "booking_start_time" not in columns:
+            statements.append("ALTER TABLE classrooms ADD COLUMN booking_start_time TIME NOT NULL DEFAULT '08:00:00'")
+        if "booking_end_time" not in columns:
+            statements.append("ALTER TABLE classrooms ADD COLUMN booking_end_time TIME NOT NULL DEFAULT '22:00:00'")
+        if "room_type" not in columns:
+            statements.append("ALTER TABLE classrooms ADD COLUMN room_type VARCHAR(40) NOT NULL DEFAULT '教室'")
+        for statement in statements:
+            db.session.execute(text(statement))
 
-    for statement in statements:
-        db.session.execute(text(statement))
+    if "users" in inspector.get_table_names():
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        if "department" not in user_columns:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN department VARCHAR(120)"))
 
-    if statements:
-        db.session.commit()
+    db.session.commit()
 
 
 def seed_default_data() -> None:

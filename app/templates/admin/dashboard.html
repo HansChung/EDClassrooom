@@ -45,6 +45,7 @@
   <div class="col-lg-6">
     <div class="card card-body">
       <h3 class="h6">借用規則</h3>
+      <div class="muted small mb-2">可直接新增或修改規則。自動核准相關建議使用：auto_approve_max_hours、auto_approve_max_attendee_ratio、auto_approve_max_attendee_count、auto_approve_end_time、auto_approve_excluded_classrooms、auto_approve_required_department。</div>
       <form method="post" action="{{ url_for('admin.upsert_rule') }}" class="row g-2">
         <div class="col-4"><input name="key" class="form-control" placeholder="key" required></div>
         <div class="col-3"><input name="value" class="form-control" placeholder="值" required></div>
@@ -115,12 +116,18 @@
       <hr>
       <h4 class="h6">匯入課表</h4>
       <form method="post" action="{{ url_for('admin.import_schedules') }}" enctype="multipart/form-data" class="row g-2">
-        <div class="col-md-8"><input type="file" name="schedule_file" class="form-control" accept=".csv,.xlsx,.ods" required></div>
+        <div class="col-md-5"><input type="file" name="schedule_file" class="form-control" accept=".csv,.xlsx,.ods" required></div>
+        <div class="col-md-3">
+          <select name="import_mode" class="form-select">
+            <option value="append">追加匯入</option>
+            <option value="replace_semester">依學期覆蓋</option>
+          </select>
+        </div>
         <div class="col-md-4 d-flex align-items-end"><button class="btn btn-outline-primary w-100">預覽匯入</button></div>
         <div class="col-md-4"><a class="btn btn-outline-secondary w-100" href="{{ url_for('admin.download_schedule_template') }}">下載範本 CSV</a></div>
         <div class="col-md-4"><a class="btn btn-outline-secondary w-100" href="{{ url_for('admin.download_schedule_template_xlsx') }}">下載範本 XLSX</a></div>
         <div class="col-md-4"><a class="btn btn-outline-secondary w-100" href="{{ url_for('admin.download_schedule_template_ods') }}">下載範本 ODS</a></div>
-        <div class="col-12"><div class="muted small">支援 CSV、XLSX、ODS。欄位：classroom_code, course_name, instructor_name, weekday(0-6), start_time(HH:MM), end_time(HH:MM), semester_label, is_active(true/false)</div></div>
+        <div class="col-12"><div class="muted small">支援 CSV、XLSX、ODS。欄位：classroom_code, course_name, instructor_name, weekday(0-6), start_time(HH:MM), end_time(HH:MM), semester_label, is_active(true/false)。選擇「依學期覆蓋」時，會先刪除檔案內同學期的既有課表。</div></div>
       </form>
       {% if schedule_import_preview is defined or schedule_import_errors is defined %}
       <div class="mt-3 p-3 rounded-4 border">
@@ -132,10 +139,14 @@
           {% if schedule_import_preview %}
           <form method="post" action="{{ url_for('admin.import_schedules') }}">
             <input type="hidden" name="preview_payload" value="{{ schedule_import_payload }}">
+            <input type="hidden" name="import_mode" value="{{ schedule_import_mode or 'append' }}">
             <button class="btn btn-primary">確認匯入</button>
           </form>
           {% endif %}
         </div>
+        {% if schedule_import_mode == 'replace_semester' %}
+        <div class="muted small mb-2">此模式會先刪除 {{ schedule_replace_count or 0 }} 筆同學期既有課表，再匯入預覽中的資料。</div>
+        {% endif %}
         {% if schedule_import_errors %}
         <div class="table-shell table-responsive mb-3">
           <table class="table table-sm align-middle">
@@ -202,6 +213,74 @@
               </tr>
             {% else %}
               <tr><td colspan="8">目前沒有課表資料</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card card-body">
+      <h3 class="h6">特定日期例外開放 / 關閉</h3>
+      <div class="muted small mb-2">用於臨時延長、提早關門、補課日開放。教室層級會覆蓋館舍層級設定。</div>
+      <form method="post" action="{{ url_for('admin.upsert_availability_override') }}" class="row g-2">
+        <div class="col-md-2"><label class="form-label">日期</label><input type="date" name="override_date" class="form-control" required></div>
+        <div class="col-md-2">
+          <label class="form-label">館舍</label>
+          <select name="location" class="form-select">
+            <option value="">不指定館舍</option>
+            <option value="教育館">教育館</option>
+            <option value="文學館">文學館</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">教室（可選）</label>
+          <select name="classroom_id" class="form-select">
+            <option value="">全部符合範圍教室</option>
+            {% for room in rooms %}
+              <option value="{{ room.id }}">{{ room.code }} {{ room.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2"><label class="form-label">標題</label><input name="title" class="form-control" placeholder="例如：校慶補課" required></div>
+        <div class="col-md-1 d-flex align-items-end">
+          <label class="form-check-label">
+            <input type="checkbox" name="is_closed" class="form-check-input"> 關閉
+          </label>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <label class="form-check-label">
+            <input type="checkbox" name="is_active" class="form-check-input" checked> 啟用
+          </label>
+        </div>
+        <div class="col-md-2"><label class="form-label">開始</label><input type="time" name="start_time" class="form-control" value="08:00"></div>
+        <div class="col-md-2"><label class="form-label">結束</label><input type="time" name="end_time" class="form-control" value="17:00"></div>
+        <div class="col-md-8"><label class="form-label">說明</label><input name="note" class="form-control" placeholder="例如：臨時延長至晚間 20:00"></div>
+        <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100">儲存規則</button></div>
+      </form>
+      <div class="table-shell table-responsive mt-3">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr><th>日期</th><th>館舍 / 教室</th><th>類型</th><th>時段</th><th>標題</th><th>說明</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            {% for item in overrides %}
+              <tr>
+                <td>{{ item.override_date.strftime("%Y-%m-%d") }}</td>
+                <td>{{ item.location or '-' }}{% if item.classroom %} / {{ item.classroom.code }}{% endif %}</td>
+                <td>{{ '關閉' if item.is_closed else '例外開放' }}</td>
+                <td>{{ '-' if item.is_closed else item.start_time.strftime("%H:%M") ~ ' - ' ~ item.end_time.strftime("%H:%M") }}</td>
+                <td>{{ item.title }}</td>
+                <td>{{ item.note or '-' }}</td>
+                <td>
+                  <form method="post" action="{{ url_for('admin.delete_availability_override', override_id=item.id) }}">
+                    <button class="btn btn-sm btn-outline-danger">刪除</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="7">目前沒有特定日期覆蓋規則</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -307,16 +386,18 @@
       <div class="table-shell table-responsive">
         <table class="table table-sm align-middle">
           <thead>
-            <tr><th>使用者</th><th>UPN</th><th>目前角色</th><th>設定</th></tr>
+            <tr><th>使用者</th><th>UPN</th><th>系所</th><th>目前角色</th><th>設定</th></tr>
           </thead>
           <tbody>
             {% for user in users %}
               <tr>
                 <td>{{ user.display_name }}</td>
                 <td>{{ user.upn }}</td>
+                <td>{{ user.department or '-' }}</td>
                 <td>{{ user.roles | map(attribute='name') | join(", ") }}</td>
                 <td>
-                  <form method="post" action="{{ url_for('admin.update_user_roles', user_id=user.id) }}" class="d-flex gap-2">
+                  <form method="post" action="{{ url_for('admin.update_user_roles', user_id=user.id) }}" class="d-flex gap-2 flex-wrap align-items-center">
+                    <input type="text" name="department" class="form-control form-control-sm" value="{{ user.department or '' }}" placeholder="系所，例如教育科技學系" style="width: 220px;">
                     <label><input type="checkbox" name="roles" value="user" {% if user.has_role("user") %}checked{% endif %}>user</label>
                     <label><input type="checkbox" name="roles" value="workstudy_manager" {% if user.has_role("workstudy_manager") %}checked{% endif %}>workstudy</label>
                     <label><input type="checkbox" name="roles" value="staff_manager" {% if user.has_role("staff_manager") %}checked{% endif %}>staff</label>

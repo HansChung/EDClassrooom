@@ -1,4 +1,5 @@
 from flask import Flask
+from flask_login import current_user
 
 from app.config import Config
 from app.extensions import db, login_manager, migrate, oauth
@@ -12,6 +13,7 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     register_extensions(app)
     register_blueprints(app)
     register_cli(app)
+    register_context_processors(app)
     bootstrap_sqlite_demo(app)
 
     return app
@@ -54,6 +56,21 @@ def register_cli(app: Flask) -> None:
     from app.seed import register_seed_commands
 
     register_seed_commands(app)
+
+
+def register_context_processors(app: Flask) -> None:
+    @app.context_processor
+    def inject_notification_count() -> dict[str, int]:
+        if not current_user.is_authenticated:
+            return {"unread_notification_count": 0}
+        from app.models import Notification
+
+        unread_count = (
+            db.session.query(Notification)
+            .filter(Notification.user_id == current_user.id, Notification.is_read.is_(False))
+            .count()
+        )
+        return {"unread_notification_count": unread_count}
 
 
 def bootstrap_sqlite_demo(app: Flask) -> None:

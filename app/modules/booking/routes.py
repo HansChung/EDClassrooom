@@ -141,14 +141,14 @@ def _build_new_booking_context(
     room_rows = []
     detail_rows = []
     for room in filtered_rooms:
-        window = get_classroom_booking_window(room)
+        window = get_classroom_booking_window(room, target_date=target_date)
         grid_cells = list_room_grid_cells(classroom=room, target_date=target_date)
         cell_map = {cell.period_code: cell for cell in grid_cells}
         aligned_cells = [cell_map[header["key"]] for header in time_headers]
         room_rows.append(
             {
                 "room": room,
-                "window": f"{window.start_time:%H:%M}-{window.end_time:%H:%M}",
+                "window": (f"關閉：{window.title or window.note or '特定日期停用'}" if window.is_closed else f"{window.start_time:%H:%M}-{window.end_time:%H:%M}"),
                 "room_type": room.room_type,
                 "cells": aligned_cells,
             }
@@ -332,7 +332,7 @@ def availability():
     except ValueError:
         return jsonify({"error": "日期格式不正確。"}), 400
 
-    booking_window = get_classroom_booking_window(classroom)
+    booking_window = get_classroom_booking_window(classroom, target_date=target_date)
     occupied_slots, available_slots = list_room_availability(classroom=classroom, target_date=target_date)
     return jsonify(
         {
@@ -345,6 +345,9 @@ def availability():
             "window": {
                 "start": booking_window.start_time.strftime("%H:%M"),
                 "end": booking_window.end_time.strftime("%H:%M"),
+                "is_closed": booking_window.is_closed,
+                "title": booking_window.title,
+                "note": booking_window.note,
             },
             "occupied_slots": [
                 {

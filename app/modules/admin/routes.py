@@ -17,7 +17,7 @@ from odf.text import P
 from openpyxl import Workbook, load_workbook
 
 from app.extensions import db
-from app.models import BookingPeriod, BookingRequest, Classroom, ClassroomBlock, CourseSchedule, Role, SystemRule, User
+from app.models import BookingPeriod, BookingRequest, Classroom, ClassroomAvailabilityOverride, ClassroomBlock, CourseSchedule, Role, SystemRule, User
 from app.modules.admin import bp
 from app.modules.booking.services import create_booking
 from app.modules.notifications.services import create_notification
@@ -52,6 +52,12 @@ def _get_dashboard_context() -> dict:
         .order_by(ClassroomBlock.start_at.asc(), Classroom.code.asc())
         .all()
     )
+    overrides = (
+        db.session.query(ClassroomAvailabilityOverride)
+        .outerjoin(Classroom)
+        .order_by(ClassroomAvailabilityOverride.override_date.asc(), ClassroomAvailabilityOverride.location.asc(), Classroom.code.asc())
+        .all()
+    )
     periods = (
         db.session.query(BookingPeriod)
         .order_by(BookingPeriod.sort_order.asc(), BookingPeriod.code.asc())
@@ -63,6 +69,7 @@ def _get_dashboard_context() -> dict:
         "users": users,
         "schedules": schedules,
         "blocks": blocks,
+        "overrides": overrides,
         "booking_periods": periods,
         "booking_periods_text": "\n".join(
             f"{period.code},{period.start_time:%H:%M},{period.end_time:%H:%M}"
@@ -226,7 +233,17 @@ def _validate_schedule_rows(rows: list[dict[str, str]]) -> tuple[list[dict[str, 
     return valid_rows, errors
 
 
-def _persist_schedule_rows(valid_rows: list[dict[str, str]]) -> int:
+def _persist_schedule_rows(valid_rows: list[dict[str, str]], import_mode: str) -> tuple[int, int]:
+    deleted = 0
+    if import_mode == "replace_semester":
+        semester_labels = sorted({row["semester_label"] for row in valid_rows})
+        if semester_labels:
+            deleted = (
+                db.session.query(CourseSchedule)
+                .filter(CourseSchedule.semester_label.in_(semester_labels))
+                .delete(synchronize_session=False)
+            )
+
     imported = 0
     for row in valid_rows:
         schedule = CourseSchedule(
@@ -242,7 +259,20 @@ def _persist_schedule_rows(valid_rows: list[dict[str, str]]) -> int:
         db.session.add(schedule)
         imported += 1
     db.session.commit()
-    return imported
+    return imported, deleted
+
+
+def _count_replaced_schedule_rows(valid_rows: list[dict[str, str]], import_mode: str) -> int:
+    if import_mode != "replace_semester":
+        return 0
+    semester_labels = sorted({row["semester_label"] for row in valid_rows})
+    if not semester_labels:
+        return 0
+    return (
+        db.session.query(CourseSchedule)
+        .filter(CourseSchedule.semester_label.in_(semester_labels))
+        .count()
+    )
 
 
 def _build_csv_template_text() -> str:
@@ -379,8 +409,9 @@ def update_user_roles(user_id: int):
 
     selected_roles = request.form.getlist("roles")
     user.roles = db.session.query(Role).filter(Role.name.in_(selected_roles)).all()
+    user.department = request.form.get("department", "").strip() or None
     db.session.commit()
-    flash("使用者角色已更新。", "success")
+    flash("使用者角色與系所已更新。", "success")
     return redirect(url_for("admin.dashboard"))
 
 
@@ -473,6 +504,9 @@ def delete_schedule(schedule_id: int):
 @roles_required("super_admin", "staff_manager")
 def import_schedules():
     preview_payload = request.form.get("preview_payload", "").strip()
+    import_mode = (request.form.get("import_mode") or "append").strip() or "append"
+    if import_mode not in {"append", "replace_semester"}:
+        import_mode = "append"
     if preview_payload:
         try:
             valid_rows = json.loads(preview_payload)
@@ -482,8 +516,11 @@ def import_schedules():
         if not valid_rows:
             flash("沒有可匯入的資料列。", "danger")
             return redirect(url_for("admin.dashboard"))
-        imported = _persist_schedule_rows(valid_rows)
-        flash(f"課表匯入完成，新增 {imported} 筆。", "success")
+        imported, deleted = _persist_schedule_rows(valid_rows, import_mode)
+        if import_mode == "replace_semester":
+            flash(f"課表匯入完成，先清除 {deleted} 筆同學期資料，再新增 {imported} 筆。", "success")
+        else:
+            flash(f"課表匯入完成，新增 {imported} 筆。", "success")
         return redirect(url_for("admin.dashboard"))
 
     file = request.files.get("schedule_file")
@@ -514,6 +551,8 @@ def import_schedules():
     context["schedule_import_errors"] = errors
     context["schedule_import_filename"] = file.filename
     context["schedule_import_payload"] = json.dumps(valid_rows, ensure_ascii=False)
+    context["schedule_import_mode"] = import_mode
+    context["schedule_replace_count"] = _count_replaced_schedule_rows(valid_rows, import_mode)
     if errors:
         flash(f"預覽完成，可匯入 {len(valid_rows)} 筆，錯誤 {len(errors)} 筆。", "warning")
     else:
@@ -574,6 +613,75 @@ def download_schedule_template_ods():
         mimetype="application/vnd.oasis.opendocument.spreadsheet",
         headers={"Content-Disposition": "attachment; filename=course-schedule-template.ods"},
     )
+
+
+@bp.route("/availability-overrides", methods=["POST"])
+@login_required
+@roles_required("super_admin", "staff_manager")
+def upsert_availability_override():
+    classroom_id = request.form.get("classroom_id", type=int)
+    location = request.form.get("location", "").strip() or None
+    override_date_raw = request.form.get("override_date", "").strip()
+    title = request.form.get("title", "").strip() or "特定日期開放調整"
+    note = request.form.get("note", "").strip() or None
+    is_closed = request.form.get("is_closed") == "on"
+    is_active = request.form.get("is_active") == "on"
+
+    classroom = db.session.get(Classroom, classroom_id) if classroom_id else None
+    if classroom is None and not location:
+        flash("請至少指定館舍或教室。", "danger")
+        return redirect(url_for("admin.dashboard"))
+    if classroom is not None and not location:
+        location = classroom.location
+
+    try:
+        override_date = datetime.strptime(override_date_raw, "%Y-%m-%d").date()
+    except ValueError:
+        flash("請提供正確的日期。", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    start_time = None
+    end_time = None
+    if not is_closed:
+        try:
+            start_time = datetime.strptime(request.form["start_time"], "%H:%M").time()
+            end_time = datetime.strptime(request.form["end_time"], "%H:%M").time()
+        except ValueError:
+            flash("請提供正確的開放起訖時間。", "danger")
+            return redirect(url_for("admin.dashboard"))
+        if start_time >= end_time:
+            flash("例外開放結束時間需晚於開始時間。", "danger")
+            return redirect(url_for("admin.dashboard"))
+
+    item = ClassroomAvailabilityOverride(
+        classroom_id=classroom.id if classroom else None,
+        location=location,
+        override_date=override_date,
+        start_time=start_time,
+        end_time=end_time,
+        is_closed=is_closed,
+        title=title,
+        note=note,
+        is_active=is_active,
+    )
+    db.session.add(item)
+    db.session.commit()
+    flash("特定日期覆蓋規則已儲存。", "success")
+    return redirect(url_for("admin.dashboard"))
+
+
+@bp.route("/availability-overrides/<int:override_id>/delete", methods=["POST"])
+@login_required
+@roles_required("super_admin", "staff_manager")
+def delete_availability_override(override_id: int):
+    item = db.session.get(ClassroomAvailabilityOverride, override_id)
+    if item is None:
+        flash("找不到特定日期覆蓋規則。", "danger")
+        return redirect(url_for("admin.dashboard"))
+    db.session.delete(item)
+    db.session.commit()
+    flash("特定日期覆蓋規則已刪除。", "info")
+    return redirect(url_for("admin.dashboard"))
 
 
 @bp.route("/blocks", methods=["POST"])
