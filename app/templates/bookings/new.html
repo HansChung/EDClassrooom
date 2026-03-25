@@ -123,10 +123,6 @@
         <thead>
           <tr>
             <th>教室</th>
-            <th>館舍</th>
-            <th>型態</th>
-            <th>容量</th>
-            <th>開放時段</th>
             {% for header in time_headers %}
               <th class="text-center">
                 <div>{{ header.label }}</div>
@@ -139,11 +135,13 @@
         <tbody>
           {% for row in room_rows %}
             <tr>
-              <td><strong>{{ row.room.code }}</strong><div class="muted small">{{ row.room.name }}</div></td>
-              <td>{{ row.room.location }}</td>
-              <td>{{ row.room_type }}</td>
-              <td>{{ row.room.capacity }}</td>
-              <td>{{ row.window }}</td>
+              <td>
+                <strong>{{ row.room.code }}</strong>
+                <div class="muted small">{{ row.room.name }}</div>
+                {% if row.room_type in ['影棚', '錄音室'] %}
+                  <div class="muted small">{{ row.room_type }} / 單次 2 小時 / 每日 4 小時</div>
+                {% endif %}
+              </td>
               {% for cell in row.cells %}
                 <td class="booking-grid-cell">
                   {% if cell.status == 'available' %}
@@ -155,6 +153,7 @@
                       data-period-code="{{ cell.period_code }}"
                       data-start="{{ cell.start_at.isoformat() }}"
                       data-end="{{ cell.end_at.isoformat() }}"
+                      data-max-hours="{{ row.max_hours_per_booking if row.max_hours_per_booking is not none else '' }}"
                       title="點擊借用 {{ cell.period_code }} / {{ cell.start_at.strftime('%H:%M') }} - {{ cell.end_at.strftime('%H:%M') }}"
                     ><span>{{ cell.period_code }}</span><span>可借</span></button>
                   {% else %}
@@ -165,7 +164,7 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="{{ 5 + time_headers|length }}">目前沒有符合條件的教室。</td>
+              <td colspan="{{ 1 + time_headers|length }}">目前沒有符合條件的教室。</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -272,8 +271,7 @@
 
 <script>
   (() => {
-    const maxHoursPerBooking = Number({{ max_hours_per_booking|tojson }});
-    const filterForm = document.querySelector('#booking-filter-form');
+        const filterForm = document.querySelector('#booking-filter-form');
     const classroomSelect = document.querySelector('#classroom-select');
     const titleInput = document.querySelector('#booking-title');
     const purposeInput = document.querySelector('#booking-purpose');
@@ -471,7 +469,8 @@
       const first = selectedButtons[0];
       const last = selectedButtons[selectedButtons.length - 1];
       const durationHours = (new Date(last.dataset.end) - new Date(first.dataset.start)) / 3600000;
-      if (durationHours > maxHoursPerBooking) {
+      const roomMaxHours = Number(first.dataset.maxHours || '') || null;
+      if (roomMaxHours && durationHours > roomMaxHours) {
         button.classList.remove('booking-grid-slot-selected');
         if (insertIndex === 0) {
           selectedButtons.shift();
@@ -479,7 +478,7 @@
           selectedButtons.pop();
         }
         updateModalFromSelection();
-        window.alert(`單次借用不可超過 ${maxHoursPerBooking} 小時。`);
+        window.alert(`此空間單次借用不可超過 ${roomMaxHours} 小時。`);
         return;
       }
       updateModalFromSelection();

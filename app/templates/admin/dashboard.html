@@ -45,7 +45,7 @@
   <div class="col-lg-6">
     <div class="card card-body">
       <h3 class="h6">借用規則</h3>
-      <div class="muted small mb-2">可直接新增或修改規則。自動核准相關建議使用：auto_approve_max_hours、auto_approve_max_attendee_ratio、auto_approve_max_attendee_count、auto_approve_end_time、auto_approve_excluded_classrooms、auto_approve_required_department。</div>
+      <div class="muted small mb-2">可直接新增或修改規則。特殊空間時數限制建議使用：restricted_room_types、restricted_classroom_codes、restricted_max_hours_per_booking、restricted_max_hours_per_day。自動核准相關建議使用：auto_approve_max_hours、auto_approve_max_attendee_ratio、auto_approve_max_attendee_count、auto_approve_end_time、auto_approve_excluded_classrooms、auto_approve_required_department。</div>
       <form method="post" action="{{ url_for('admin.upsert_rule') }}" class="row g-2">
         <div class="col-4"><input name="key" class="form-control" placeholder="key" required></div>
         <div class="col-3"><input name="value" class="form-control" placeholder="值" required></div>

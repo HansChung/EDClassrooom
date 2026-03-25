@@ -17,8 +17,8 @@ from app.modules.booking.services import (
     cancel_booking,
     create_booking,
     get_booking_periods,
+    get_booking_duration_limits,
     get_classroom_booking_window,
-    get_int_rule,
     list_room_grid_cells,
     list_room_availability,
     list_visible_bookings_for_role,
@@ -207,11 +207,13 @@ def _build_new_booking_context(
         grid_cells = list_room_grid_cells(classroom=room, target_date=target_date)
         cell_map = {cell.period_code: cell for cell in grid_cells}
         aligned_cells = [cell_map[header["key"]] for header in time_headers]
+        max_hours_per_booking, _ = get_booking_duration_limits(room)
         room_rows.append(
             {
                 "room": room,
                 "window": (f"關閉：{window.title or window.note or '特定日期停用'}" if window.is_closed else f"{window.start_time:%H:%M}-{window.end_time:%H:%M}"),
                 "room_type": room.room_type,
+                "max_hours_per_booking": max_hours_per_booking,
                 "cells": aligned_cells,
             }
         )
@@ -250,7 +252,6 @@ def _build_new_booking_context(
         "room_rows": room_rows,
         "detail_rows": detail_rows,
         "booking_periods_text": period_text,
-        "max_hours_per_booking": get_int_rule("max_hours_per_booking", 2),
         "booking_reason_categories": BOOKING_REASON_CATEGORIES,
         "booking_templates": BOOKING_TEMPLATES,
         "default_form_state": _build_default_form_state(rebook_booking),

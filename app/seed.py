@@ -17,14 +17,18 @@ DEFAULT_ROLES = [
 ]
 
 DEFAULT_RULES = [
-    ("max_hours_per_booking", "2", "單次借用上限（小時）"),
-    ("max_hours_per_day", "3", "每日借用總時數上限（小時）"),
+    ("max_hours_per_booking", "2", "舊版全域單次借用上限，保留相容用"),
+    ("max_hours_per_day", "3", "舊版全域每日借用上限，保留相容用"),
+    ("restricted_room_types", "影棚,錄音室", "套用特殊借用時數限制的空間型態，以逗號分隔"),
+    ("restricted_classroom_codes", "", "套用特殊借用時數限制的教室代碼，以逗號分隔"),
+    ("restricted_max_hours_per_booking", "2", "特殊空間單次借用上限（小時）"),
+    ("restricted_max_hours_per_day", "4", "特殊空間每日借用總時數上限（小時）"),
     ("auto_approve_max_hours", "2", "自動核准時數上限（小時）"),
     ("auto_approve_max_attendee_ratio", "0.8", "超過教室容量比例時改為人工審核（0-1）"),
     ("auto_approve_max_attendee_count", "", "超過此人數改為人工審核，空白代表不限制"),
     ("auto_approve_end_time", "", "晚於此時間結束時改為人工審核，格式 HH:MM，空白代表不限制"),
     ("auto_approve_excluded_classrooms", "", "不可自動核准的教室代碼，以逗號分隔"),
-    ("auto_approve_required_department", "", "限定特定系所才能自動核准，空白代表不限制"),
+    ("auto_approve_required_department", "教育科技,教科", "只有系所名稱包含這些關鍵字的使用者才可自動核准，以逗號分隔"),
 ]
 
 DEFAULT_BOOKING_PERIODS = [
@@ -46,9 +50,9 @@ DEFAULT_BOOKING_PERIODS = [
 
 DEFAULT_CLASSROOMS = [
     ("L105", "多媒體討論教室", "文學館", "教室", 65, True, None, time(hour=9), time(hour=18)),
-    ("L108", "數位錄音室 B", "文學館", "錄音室", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
-    ("L109", "數位錄音室 A", "文學館", "錄音室", 2, True, "每次只能借 2 小時，若無人借用可續借 1 小時，一天以 3 小時為限。", time(hour=9), time(hour=18)),
-    ("L111", "影棚", "文學館", "影棚", 10, True, None, time(hour=9), time(hour=18)),
+    ("L108", "數位錄音室 B", "文學館", "錄音室", 2, True, "單次借用以 2 小時為限，每日累計不超過 4 小時。", time(hour=9), time(hour=18)),
+    ("L109", "數位錄音室 A", "文學館", "錄音室", 2, True, "單次借用以 2 小時為限，每日累計不超過 4 小時。", time(hour=9), time(hour=18)),
+    ("L111", "影棚", "文學館", "影棚", 10, True, "單次借用以 2 小時為限，每日累計不超過 4 小時。", time(hour=9), time(hour=18)),
     ("L102", "電腦教室", "文學館", "電腦教室", 65, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
     ("L110", "電腦教室", "文學館", "電腦教室", 70, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
     ("L103", "蘋果電腦教室", "文學館", "電腦教室", 32, False, "請向工頭登記借用", time(hour=9), time(hour=18)),
@@ -97,8 +101,13 @@ def seed_default_data() -> None:
             db.session.add(Role(name=name, description=desc))
 
     for key, value, desc in DEFAULT_RULES:
-        if db.session.query(SystemRule).filter_by(key=key).first() is None:
+        existing_rule = db.session.query(SystemRule).filter_by(key=key).first()
+        if existing_rule is None:
             db.session.add(SystemRule(key=key, value=value, description=desc))
+            continue
+        existing_rule.description = desc
+        if key == "auto_approve_required_department" and not existing_rule.value.strip():
+            existing_rule.value = value
 
     for code, start_time, end_time, sort_order in DEFAULT_BOOKING_PERIODS:
         if db.session.query(BookingPeriod).filter_by(code=code).first() is None:

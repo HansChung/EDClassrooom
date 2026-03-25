@@ -421,6 +421,42 @@ def get_csv_rule_values(key: str) -> set[str]:
     return {value.strip() for value in row.value.split(",") if value.strip()}
 
 
+def get_optional_int_rule(key: str) -> int | None:
+    row = db.session.query(SystemRule).filter_by(key=key).first()
+    if not row or not row.value.strip():
+        return None
+    try:
+        return int(row.value.strip())
+    except ValueError:
+        return None
+
+
+def room_has_special_hour_limit(classroom: Classroom) -> bool:
+    limited_codes = {code.upper() for code in get_csv_rule_values("restricted_classroom_codes")}
+    if limited_codes and classroom.code.upper() in limited_codes:
+        return True
+    limited_types = get_csv_rule_values("restricted_room_types")
+    return classroom.room_type in limited_types
+
+
+def get_booking_duration_limits(classroom: Classroom) -> tuple[int | None, int | None]:
+    if not room_has_special_hour_limit(classroom):
+        return None, None
+    per_booking_limit = get_optional_int_rule("restricted_max_hours_per_booking")
+    per_day_limit = get_optional_int_rule("restricted_max_hours_per_day")
+    return per_booking_limit, per_day_limit
+
+
+def department_matches_rule(user_department: str | None, raw_rule_value: str) -> bool:
+    department = (user_department or "").strip()
+    if not department:
+        return False
+    keywords = [value.strip() for value in raw_rule_value.split(",") if value.strip()]
+    if not keywords:
+        return True
+    return any(keyword in department for keyword in keywords)
+
+
 def resolve_auto_approval_risk(*, requester: User, classroom: Classroom, start_at: datetime, end_at: datetime, attendee_count: int) -> str:
     risk_level = "low"
     auto_approve_max_hours = get_int_rule("auto_approve_max_hours", 2)
@@ -449,7 +485,7 @@ def resolve_auto_approval_risk(*, requester: User, classroom: Classroom, start_a
 
     required_department = db.session.query(SystemRule).filter_by(key="auto_approve_required_department").first()
     if required_department and required_department.value.strip():
-        if (requester.department or "").strip() != required_department.value.strip():
+        if not department_matches_rule(requester.department, required_department.value.strip()):
             risk_level = "high"
 
     return risk_level
@@ -485,9 +521,9 @@ def validate_booking(
         )
 
     duration_hours = (end_at - start_at).total_seconds() / 3600
-    max_hours_per_booking = get_int_rule("max_hours_per_booking", 2)
-    if duration_hours > max_hours_per_booking:
-        return BookingValidationResult(False, reason=f"單次借用不可超過 {max_hours_per_booking} 小時。")
+    max_hours_per_booking, max_hours_per_day = get_booking_duration_limits(classroom)
+    if max_hours_per_booking is not None and duration_hours > max_hours_per_booking:
+        return BookingValidationResult(False, reason=f"{classroom.room_type} 單次借用不可超過 {max_hours_per_booking} 小時。")
 
     day_start = start_at.replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = start_at.replace(hour=23, minute=59, second=59, microsecond=999999)
@@ -501,13 +537,14 @@ def validate_booking(
         )
         .all()
     )
+    if max_hours_per_day is not None:
+        existing_daily_bookings = [item for item in existing_daily_bookings if room_has_special_hour_limit(item.classroom)]
     daily_hours = sum(
         (item.end_at - item.start_at).total_seconds() / 3600.0
         for item in existing_daily_bookings
     )
-    max_hours_per_day = get_int_rule("max_hours_per_day", 3)
-    if daily_hours + duration_hours > max_hours_per_day:
-        return BookingValidationResult(False, reason=f"每日借用總時數不可超過 {max_hours_per_day} 小時。")
+    if max_hours_per_day is not None and daily_hours + duration_hours > max_hours_per_day:
+        return BookingValidationResult(False, reason=f"{classroom.room_type} 每日借用總時數不可超過 {max_hours_per_day} 小時。")
 
     conflict_exists = bool(
         _get_room_bookings_for_window(
