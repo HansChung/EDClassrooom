@@ -46,26 +46,48 @@
     <div class="card card-body">
       <h3 class="h6">借用規則</h3>
       <div class="muted small mb-3">把常用設定整理成表單。一般管理只需要改這裡，不需要直接碰規則代碼。</div>
-      <form method="post" action="{{ url_for('admin.update_rule_settings') }}" class="row g-3">
+      <form method="post" action="{{ url_for('admin.update_rule_settings') }}" class="row g-3" id="friendly-rules-form">
+        <div class="col-12 d-flex justify-content-end gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="restore-rule-defaults">恢復建議值</button>
+          <button class="btn btn-primary btn-sm">儲存借用規則</button>
+        </div>
         <div class="col-12">
           <div class="glass-card p-3 h-100">
             <div class="fw-semibold mb-2">特殊空間限制</div>
-            <div class="row g-2">
+            <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">限制空間型態</label>
-                <input name="restricted_room_types" class="form-control" value="{{ rule_values.get('restricted_room_types', '') }}" placeholder="例如：影棚,錄音室">
+                <div class="booking-checkbox-list">
+                  {% for room_type in ['影棚', '錄音室'] %}
+                    <label class="booking-check">
+                      <input type="checkbox" name="restricted_room_types" value="{{ room_type }}" {% if room_type in selected_restricted_room_types %}checked{% endif %}>
+                      <span>{{ room_type }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+                <div class="form-text">勾選後，這些空間型態會套用較嚴格的借用時數限制。</div>
               </div>
               <div class="col-md-6">
-                <label class="form-label">另外限制的教室代碼</label>
-                <input name="restricted_classroom_codes" class="form-control" value="{{ rule_values.get('restricted_classroom_codes', '') }}" placeholder="例如：L111,L108,L109">
+                <label class="form-label">另外限制的教室</label>
+                <div class="booking-checkbox-list">
+                  {% for room in rooms if room.is_online_bookable %}
+                    <label class="booking-check">
+                      <input type="checkbox" name="restricted_classroom_codes" value="{{ room.code }}" {% if room.code in selected_restricted_classroom_codes %}checked{% endif %}>
+                      <span>{{ room.code }} {{ room.name }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+                <div class="form-text">如需額外限制特定教室，可直接勾選，不必手動輸入代碼。</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">單次借用上限（小時）</label>
                 <input name="restricted_max_hours_per_booking" type="number" min="1" class="form-control" value="{{ rule_values.get('restricted_max_hours_per_booking', '') }}">
+                <div class="form-text">目前建議值為 2 小時，適合影棚與錄音室。</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">每日借用上限（小時）</label>
                 <input name="restricted_max_hours_per_day" type="number" min="1" class="form-control" value="{{ rule_values.get('restricted_max_hours_per_day', '') }}">
+                <div class="form-text">目前建議值為 4 小時，避免少數人長時間占用特殊空間。</div>
               </div>
             </div>
           </div>
@@ -73,38 +95,77 @@
         <div class="col-12">
           <div class="glass-card p-3 h-100">
             <div class="fw-semibold mb-2">自動核准條件</div>
-            <div class="row g-2">
+            <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">可自動核准的系所關鍵字</label>
                 <input name="auto_approve_required_department" class="form-control" value="{{ rule_values.get('auto_approve_required_department', '') }}" placeholder="例如：教育科技,教科">
+                <div class="form-text">系所名稱只要包含任一關鍵字，就可進入自動核准條件判斷。</div>
               </div>
               <div class="col-md-3">
                 <label class="form-label">自動核准時數上限</label>
                 <input name="auto_approve_max_hours" type="number" min="1" class="form-control" value="{{ rule_values.get('auto_approve_max_hours', '') }}">
+                <div class="form-text">超過此時數的借用，自動轉人工審核。</div>
               </div>
               <div class="col-md-3">
                 <label class="form-label">人數比例上限</label>
                 <input name="auto_approve_max_attendee_ratio" type="number" min="0" max="1" step="0.1" class="form-control" value="{{ rule_values.get('auto_approve_max_attendee_ratio', '') }}">
+                <div class="form-text">例如 0.8 代表超過容量 80% 就人工審核。</div>
               </div>
               <div class="col-md-4">
                 <label class="form-label">超過此人數改人工審核</label>
                 <input name="auto_approve_max_attendee_count" type="number" min="1" class="form-control" value="{{ rule_values.get('auto_approve_max_attendee_count', '') }}" placeholder="留空代表不限制">
+                <div class="form-text">留空時不會套用這條限制。</div>
               </div>
               <div class="col-md-4">
                 <label class="form-label">晚於此時間結束需人工審核</label>
                 <input name="auto_approve_end_time" type="time" class="form-control" value="{{ rule_values.get('auto_approve_end_time', '') }}">
+                <div class="form-text">例如 18:00，超過後改人工審核。</div>
               </div>
               <div class="col-md-4">
                 <label class="form-label">一律人工審核的教室</label>
                 <input name="auto_approve_excluded_classrooms" class="form-control" value="{{ rule_values.get('auto_approve_excluded_classrooms', '') }}" placeholder="例如：ED205,L111">
+                <div class="form-text">多間教室請用逗號分隔。</div>
               </div>
             </div>
           </div>
         </div>
-        <div class="col-12 d-flex justify-content-end gap-2">
-          <button class="btn btn-primary btn-sm">儲存借用規則</button>
-        </div>
       </form>
+      <script>
+        (() => {
+          const restoreButton = document.querySelector('#restore-rule-defaults');
+          const form = document.querySelector('#friendly-rules-form');
+          if (!restoreButton || !form) {
+            return;
+          }
+          const defaults = {
+            restricted_room_types: ['影棚', '錄音室'],
+            restricted_classroom_codes: ['L108', 'L109', 'L111'],
+            restricted_max_hours_per_booking: '2',
+            restricted_max_hours_per_day: '4',
+            auto_approve_required_department: '教育科技,教科',
+            auto_approve_max_hours: '2',
+            auto_approve_max_attendee_ratio: '0.8',
+            auto_approve_max_attendee_count: '',
+            auto_approve_end_time: '',
+            auto_approve_excluded_classrooms: '',
+          };
+          restoreButton.addEventListener('click', () => {
+            Object.entries(defaults).forEach(([name, value]) => {
+              const fields = form.querySelectorAll(`[name="${name}"]`);
+              if (!fields.length) {
+                return;
+              }
+              if (fields[0].type === 'checkbox') {
+                fields.forEach((field) => {
+                  field.checked = Array.isArray(value) && value.includes(field.value);
+                });
+                return;
+              }
+              fields[0].value = value;
+            });
+          });
+        })();
+      </script>
       <details class="mt-3">
         <summary class="small text-muted">查看原始規則代碼</summary>
         <ul class="small mb-0 mt-2">

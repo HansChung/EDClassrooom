@@ -64,10 +64,13 @@ def _get_dashboard_context() -> dict:
         .all()
     )
     rule_map = {rule.key: rule for rule in rules}
+    rule_values = {key: rule.value for key, rule in rule_map.items()}
     return {
         "rooms": rooms,
         "rules": rules,
-        "rule_values": {key: rule.value for key, rule in rule_map.items()},
+        "rule_values": rule_values,
+        "selected_restricted_room_types": {value.strip() for value in rule_values.get("restricted_room_types", "").split(",") if value.strip()},
+        "selected_restricted_classroom_codes": {value.strip().upper() for value in rule_values.get("restricted_classroom_codes", "").split(",") if value.strip()},
         "users": users,
         "schedules": schedules,
         "blocks": blocks,
@@ -336,8 +339,12 @@ def update_rule_settings():
         "auto_approve_end_time": "晚於此時間結束時改為人工審核，格式 HH:MM，空白代表不限制",
         "auto_approve_excluded_classrooms": "不可自動核准的教室代碼，以逗號分隔",
     }
+    checkbox_values = {
+        "restricted_room_types": ",".join(value.strip() for value in request.form.getlist("restricted_room_types") if value.strip()),
+        "restricted_classroom_codes": ",".join(value.strip().upper() for value in request.form.getlist("restricted_classroom_codes") if value.strip()),
+    }
     for key, description in definitions.items():
-        value = (request.form.get(key) or "").strip()
+        value = checkbox_values.get(key, (request.form.get(key) or "").strip())
         rule = db.session.query(SystemRule).filter_by(key=key).first()
         if rule is None:
             db.session.add(SystemRule(key=key, value=value, description=description))
