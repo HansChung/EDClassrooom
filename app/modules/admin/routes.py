@@ -63,9 +63,11 @@ def _get_dashboard_context() -> dict:
         .order_by(BookingPeriod.sort_order.asc(), BookingPeriod.code.asc())
         .all()
     )
+    rule_map = {rule.key: rule for rule in rules}
     return {
         "rooms": rooms,
         "rules": rules,
+        "rule_values": {key: rule.value for key, rule in rule_map.items()},
         "users": users,
         "schedules": schedules,
         "blocks": blocks,
@@ -315,6 +317,35 @@ def upsert_classroom():
     room.note = request.form.get("note", "").strip() or None
     db.session.commit()
     flash("教室資料已更新。", "success")
+    return redirect(url_for("admin.dashboard"))
+
+
+@bp.route("/rules/friendly", methods=["POST"])
+@login_required
+@roles_required("super_admin", "staff_manager")
+def update_rule_settings():
+    definitions = {
+        "restricted_room_types": "套用特殊借用時數限制的空間型態，以逗號分隔",
+        "restricted_classroom_codes": "套用特殊借用時數限制的教室代碼，以逗號分隔",
+        "restricted_max_hours_per_booking": "特殊空間單次借用上限（小時）",
+        "restricted_max_hours_per_day": "特殊空間每日借用總時數上限（小時）",
+        "auto_approve_required_department": "只有系所名稱包含這些關鍵字的使用者才可自動核准，以逗號分隔",
+        "auto_approve_max_hours": "自動核准時數上限（小時）",
+        "auto_approve_max_attendee_ratio": "超過教室容量比例時改為人工審核（0-1）",
+        "auto_approve_max_attendee_count": "超過此人數改為人工審核，空白代表不限制",
+        "auto_approve_end_time": "晚於此時間結束時改為人工審核，格式 HH:MM，空白代表不限制",
+        "auto_approve_excluded_classrooms": "不可自動核准的教室代碼，以逗號分隔",
+    }
+    for key, description in definitions.items():
+        value = (request.form.get(key) or "").strip()
+        rule = db.session.query(SystemRule).filter_by(key=key).first()
+        if rule is None:
+            db.session.add(SystemRule(key=key, value=value, description=description))
+        else:
+            rule.value = value
+            rule.description = description
+    db.session.commit()
+    flash("借用規則已更新。", "success")
     return redirect(url_for("admin.dashboard"))
 
 

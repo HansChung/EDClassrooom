@@ -45,19 +45,74 @@
   <div class="col-lg-6">
     <div class="card card-body">
       <h3 class="h6">借用規則</h3>
-      <div class="muted small mb-2">可直接新增或修改規則。特殊空間時數限制建議使用：restricted_room_types、restricted_classroom_codes、restricted_max_hours_per_booking、restricted_max_hours_per_day。自動核准相關建議使用：auto_approve_max_hours、auto_approve_max_attendee_ratio、auto_approve_max_attendee_count、auto_approve_end_time、auto_approve_excluded_classrooms、auto_approve_required_department。</div>
-      <form method="post" action="{{ url_for('admin.upsert_rule') }}" class="row g-2">
-        <div class="col-4"><input name="key" class="form-control" placeholder="key" required></div>
-        <div class="col-3"><input name="value" class="form-control" placeholder="值" required></div>
-        <div class="col-5"><input name="description" class="form-control" placeholder="說明" required></div>
-        <div class="col-12"><button class="btn btn-primary btn-sm">儲存規則</button></div>
+      <div class="muted small mb-3">把常用設定整理成表單。一般管理只需要改這裡，不需要直接碰規則代碼。</div>
+      <form method="post" action="{{ url_for('admin.update_rule_settings') }}" class="row g-3">
+        <div class="col-12">
+          <div class="glass-card p-3 h-100">
+            <div class="fw-semibold mb-2">特殊空間限制</div>
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label">限制空間型態</label>
+                <input name="restricted_room_types" class="form-control" value="{{ rule_values.get('restricted_room_types', '') }}" placeholder="例如：影棚,錄音室">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">另外限制的教室代碼</label>
+                <input name="restricted_classroom_codes" class="form-control" value="{{ rule_values.get('restricted_classroom_codes', '') }}" placeholder="例如：L111,L108,L109">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">單次借用上限（小時）</label>
+                <input name="restricted_max_hours_per_booking" type="number" min="1" class="form-control" value="{{ rule_values.get('restricted_max_hours_per_booking', '') }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">每日借用上限（小時）</label>
+                <input name="restricted_max_hours_per_day" type="number" min="1" class="form-control" value="{{ rule_values.get('restricted_max_hours_per_day', '') }}">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="glass-card p-3 h-100">
+            <div class="fw-semibold mb-2">自動核准條件</div>
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label">可自動核准的系所關鍵字</label>
+                <input name="auto_approve_required_department" class="form-control" value="{{ rule_values.get('auto_approve_required_department', '') }}" placeholder="例如：教育科技,教科">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">自動核准時數上限</label>
+                <input name="auto_approve_max_hours" type="number" min="1" class="form-control" value="{{ rule_values.get('auto_approve_max_hours', '') }}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">人數比例上限</label>
+                <input name="auto_approve_max_attendee_ratio" type="number" min="0" max="1" step="0.1" class="form-control" value="{{ rule_values.get('auto_approve_max_attendee_ratio', '') }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">超過此人數改人工審核</label>
+                <input name="auto_approve_max_attendee_count" type="number" min="1" class="form-control" value="{{ rule_values.get('auto_approve_max_attendee_count', '') }}" placeholder="留空代表不限制">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">晚於此時間結束需人工審核</label>
+                <input name="auto_approve_end_time" type="time" class="form-control" value="{{ rule_values.get('auto_approve_end_time', '') }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">一律人工審核的教室</label>
+                <input name="auto_approve_excluded_classrooms" class="form-control" value="{{ rule_values.get('auto_approve_excluded_classrooms', '') }}" placeholder="例如：ED205,L111">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 d-flex justify-content-end gap-2">
+          <button class="btn btn-primary btn-sm">儲存借用規則</button>
+        </div>
       </form>
-      <hr>
-      <ul class="small mb-0">
-        {% for rule in rules %}
-          <li><code>{{ rule.key }}</code> = {{ rule.value }}（{{ rule.description }}）</li>
-        {% endfor %}
-      </ul>
+      <details class="mt-3">
+        <summary class="small text-muted">查看原始規則代碼</summary>
+        <ul class="small mb-0 mt-2">
+          {% for rule in rules %}
+            <li><code>{{ rule.key }}</code> = {{ rule.value }}（{{ rule.description }}）</li>
+          {% endfor %}
+        </ul>
+      </details>
     </div>
   </div>
 
